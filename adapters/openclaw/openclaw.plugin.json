@@ -1,0 +1,19 @@
+{
+  "id": "myelinate",
+  "name": "Myelinate",
+  "description": "Recalls learned skills and memories before each turn and records outcomes after it, so the agent improves over time.",
+  "activation": { "onStartup": true },
+  "contracts": { "tools": ["skill_view", "remember", "rate_last_turn"] },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["gatewayUrl"],
+    "properties": {
+      "gatewayUrl": { "type": "string", "description": "Myelinate base URL, e.g. https://learner.internal:8080" },
+      "apiKey": { "type": "string", "description": "Tenant API key (myl_...) with the 'learn' scope. Prefer the MYELINATE_API_KEY env var." },
+      "agentId": { "type": "string", "default": "openclaw", "description": "Knowledge namespace; agents sharing an id share skills." },
+      "perUserMemory": { "type": "boolean", "default": true, "description": "Scope preferences to the sender." },
+      "timeoutMs": { "type": "number", "default": 4000 }
+    }
+  }
+}

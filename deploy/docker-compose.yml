@@ -1,0 +1,38 @@
+# Local production-like stack: gateway (API + MCP) + dedicated learning worker + Postgres.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: myelinate
+      POSTGRES_USER: myelinate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myelinate"]
+      interval: 5s
+
+  gateway:
+    build: ..
+    env_file: ../.env
+    environment:
+      MYELINATE_DATABASE_URL: postgresql+asyncpg://myelinate:${POSTGRES_PASSWORD}@postgres:5432/myelinate
+      MYELINATE_WORKER_ENABLED: "false"   # learning runs in the worker service below
+    ports: ["8080:8080"]
+    depends_on: { postgres: { condition: service_healthy } }
+
+  worker:
+    build: ..
+    command: ["myelinate", "worker"]
+    env_file: ../.env
+    environment:
+      MYELINATE_DATABASE_URL: postgresql+asyncpg://myelinate:${POSTGRES_PASSWORD}@postgres:5432/myelinate
+      MYELINATE_WORKER_HEARTBEAT_FILE: /tmp/worker.alive
+    healthcheck:  # workers serve no HTTP; healthy while the job loop keeps touching its heartbeat file
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time() - os.path.getmtime('/tmp/worker.alive') > 60)"]
+      interval: 15s
+      start_period: 20s
+    depends_on: { postgres: { condition: service_healthy } }
+    deploy: { replicas: 2 }
+
+volumes:
+  pgdata:

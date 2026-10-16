@@ -1,0 +1,54 @@
+[project]
+name = "myelinate"
+version = "0.1.0"
+description = "Myelinate: plug-in skills, memory, reflection and evolution for any agent framework"
+readme = "README.md"
+authors = [
+    { name = "arrondavide", email = "arrondavide@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "anthropic>=1.15.0",
+    "asyncpg>=0.32.0",
+    "fastapi>=0.143.2",
+    "httpx>=0.28.1",
+    "mcp>=2.3.0",
+    "prometheus-client>=0.26.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.0",
+    "pyjwt[crypto]>=2.15.1",
+    "sqlalchemy[asyncio]>=2",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+maf = [
+    "agent-framework-core>=1.22.0",
+]
+otel = [
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
+    "opentelemetry-instrumentation-fastapi>=0.66b1",
+    "opentelemetry-sdk>=1.45.1",
+]
+
+[project.scripts]
+myelinate = "myelinate.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
