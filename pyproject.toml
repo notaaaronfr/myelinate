@@ -1,8 +1,19 @@
 [project]
 name = "myelinate"
 version = "0.1.0"
-description = "Myelinate: plug-in skills, memory, reflection and evolution for any agent framework"
+description = "Self-improving skills and memory for any AI agent framework, with governance built in"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["ai-agents", "self-improving", "agent-memory", "skills", "mcp", "openclaw", "microsoft-agent-framework",
+            "llm", "continual-learning"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Framework :: FastAPI",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 authors = [
     { name = "arrondavide", email = "arrondavide@gmail.com" }
 ]
@@ -32,6 +43,11 @@ otel = [
     "opentelemetry-instrumentation-fastapi>=0.66b1",
     "opentelemetry-sdk>=1.45.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/notaaaronfr/myelinate"
+Repository = "https://github.com/notaaaronfr/myelinate"
+Issues = "https://github.com/notaaaronfr/myelinate/issues"
 
 [project.scripts]
 myelinate = "myelinate.cli:main"

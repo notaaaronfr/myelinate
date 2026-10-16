@@ -31,5 +31,19 @@
   "license": "MIT",
   "engines": {
     "node": ">=24.16.0 <25 || >=26.1.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/notaaaronfr/myelinate.git",
+    "directory": "adapters/openclaw"
+  },
+  "homepage": "https://github.com/notaaaronfr/myelinate#readme",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "ai-agents",
+    "self-improving",
+    "memory",
+    "skills"
+  ]
 }

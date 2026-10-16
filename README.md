@@ -1,5 +1,9 @@
 # Myelinate
 
+[![CI](https://github.com/notaaaronfr/myelinate/actions/workflows/ci.yml/badge.svg)](https://github.com/notaaaronfr/myelinate/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+
 **Self-improving skills and memory for any AI agent framework, with governance built in.**
 
 > *Myelin* is the sheath the brain builds around pathways that get used, and that work, so they fire faster and more
@@ -248,3 +252,12 @@ against a real identity provider (JWT validation is implemented, but was not tes
 - **OTLP** is accepted as JSON (`http/json`). Protobuf needs a collector in front.
 - **The OpenClaw plugin** targets `openclaw@2026.10.4` (Node ≥24.16 <25 or ≥26.1). Re-run `npx tsc` against newer
   SDK versions when upgrading.
+
+## Contributing and security
+
+Issues and pull requests are welcome. CI runs the test suite on SQLite and PostgreSQL, type-checks the OpenClaw plugin
+and builds the Docker image. Please report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE)
