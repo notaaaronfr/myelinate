@@ -309,7 +309,7 @@ def test_purge_covers_recalls_jobs_and_audit(env):
     c, brain, app, admin, agent = env
     recall(c, agent)
     out = c.portal.call(app.state.engine.purge_expired)
-    assert set(out) == {"episodes", "recalls", "jobs", "audit"}
+    assert set(out) == {"episodes", "recalls", "jobs", "audit", "otel_pending"}
 
 
 def _proto_trace(trace_hex: str, spans: list[dict]) -> bytes:
@@ -376,3 +376,29 @@ def test_mcp_requires_auth_up_front(env):
     h = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
     r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=h)
     assert r.status_code == 401 and r.headers.get("www-authenticate") == "Bearer"
+
+
+def test_otlp_child_spans_before_root_and_late_output_are_kept(env):
+    c, brain, app, admin, agent = env
+    trace = "1af7651916cd43dd8448eb211c80319d"
+    h = agent | {"content-type": "application/x-protobuf", "x-agent-id": "ops"}
+    tools_only = _proto_trace(trace, [{"name": "execute_tool kubectl", "error": "ImagePullBackOff",
+                                       "attrs": {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "kubectl"}}])
+    r0 = c.post("/v1/traces", content=tools_only, headers=h)
+    assert r0.status_code == 200 and r0.json()["episode_ids"] == []  # held until the trace's root arrives
+    chat = _proto_trace(trace, [{"name": "chat", "attrs": {"gen_ai.operation.name": "chat", "gen_ai.input.messages":
+                                 '[{"role":"user","parts":[{"type":"text","content":"deploy billing"}]}]'}}])
+    eid = c.post("/v1/traces", content=chat, headers=h).json()["episode_ids"][0]
+    root = _proto_trace(trace, [{"name": "invoke_agent", "attrs": {
+        "gen_ai.operation.name": "invoke_agent",
+        "gen_ai.output.messages": '[{"role":"assistant","parts":[{"type":"text","content":"rolled back"}]}]'}}])
+    assert c.post("/v1/traces", content=root, headers=h).json()["episode_ids"] == [eid]
+
+    async def load():
+        from myelinate.db import EpisodeRow
+        async with app.state.db.session() as ses:
+            return await ses.get(EpisodeRow, eid)
+
+    ep = c.portal.call(load)
+    assert ep.tool_calls and ep.tool_calls[0]["error"] == "ImagePullBackOff"  # early child span kept
+    assert any(m["content"] == "rolled back" for m in ep.messages)  # late output appended

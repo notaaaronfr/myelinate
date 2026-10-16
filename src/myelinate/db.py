@@ -290,6 +290,16 @@ class JobRow(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+class OtelPendingRow(Base):
+    """Child spans that arrived before their trace's agent / model-call span; folded in when it arrives."""
+
+    __tablename__ = "otel_pending"
+    tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    trace_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    spans: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class AuditRow(Base):
     __tablename__ = "audit_log"
     __table_args__ = (Index("ix_audit_scope", "tenant_id", "created_at"),)

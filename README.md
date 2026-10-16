@@ -228,7 +228,7 @@ src/myelinate/
   core.py         metered LLM, budgets, jobs, audit           worker.py  durable job worker
   gateway/        FastAPI app, auth/RBAC, MCP server          adapters/  maf.py, generic.py
 adapters/openclaw TypeScript plugin + reusable TS client
-tests/            59 tests: loop, gating, tagging, canary, GEPA, memory, dedup, lift, OTel, import, auth, MCP, budget,
+tests/            60 tests: loop, gating, tagging, canary, GEPA, memory, dedup, lift, OTel, import, auth, MCP, budget,
                   concurrency, idempotency, SDK request shape, regressions
 ```
 
@@ -236,7 +236,7 @@ tests/            59 tests: loop, gating, tagging, canary, GEPA, memory, dedup, 
 
 | Check | Result |
 |---|---|
-| Test suite (59 tests) | Passes on SQLite and on PostgreSQL 17 (`MYELINATE_TEST_DATABASE_URL=postgresql+asyncpg://… uv run pytest`), with 5 repeated runs and no flakes |
+| Test suite (60 tests) | Passes on SQLite and on PostgreSQL 17 (`MYELINATE_TEST_DATABASE_URL=postgresql+asyncpg://… uv run pytest`), with 5 repeated runs and no flakes |
 | Microsoft Agent Framework adapter | Runs inside a real `agent_framework` 1.22 `Agent` (test) |
 | OpenClaw plugin | Type-checks against the real `openclaw@2026.10.4` SDK. Installs, enables, passes `plugins doctor`, and its hooks and tools register in the real runtime (`inspect --runtime`). **Real agent turns with `anthropic/claude-opus-5-5` close the loop:** (1) the agent followed an injected skill exactly; (2) a user correction given in chat reached the gateway through `rate_last_turn`; (3) Claude reflected and proposed a rule update, which policy held for review; (4) after approval, a brand-new session produced the corrected format |
 | Docker | `docker build` succeeds (415 MB, non-root). `docker compose` (gateway, 2 workers, Postgres) reaches healthy on every service. A failed production migration recorded via the API was learned by a worker replica with real Claude into a correct `postgres-schema-migration` skill stored in Postgres |

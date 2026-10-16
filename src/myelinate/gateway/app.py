@@ -56,7 +56,7 @@ from ..models import (
     SkillImport,
     SkillIn,
 )
-from ..otel import decode_otlp, spans_to_episodes
+from ..otel import decode_otlp, group_spans
 from ..telemetry import configure_logging, configure_tracing, metrics
 from ..worker import Worker
 from .auth import ALL_SCOPES, Authenticator, AuthError, Principal, RateLimiter, generate_key, hash_key
@@ -299,12 +299,15 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         out = []
-        for ep, recall_id in spans_to_episodes(payload, agent_override=override):
-            ep.recall_id = recall_id
-            existing = await engine._by_key(p.tenant_id, ep.idempotency_key) if ep.idempotency_key else None
-            # A trace's spans often arrive in several exports (children before the root): merge, don't drop.
-            out.append(await engine.merge_episode(p.tenant_id, existing, ep) if existing
-                       else (await engine.record(p.tenant_id, ep)).episode_id)
+        for trace_id, spans in group_spans(payload).items():
+            # Spans of one trace often arrive in several exports (children before the root): never drop them.
+            try:
+                eid = await engine.ingest_trace(p.tenant_id, trace_id, spans, override)
+            except (ValueError, KeyError, TypeError) as e:  # one malformed trace must not fail the batch
+                log.warning("otel.trace_skipped", trace_id=trace_id, error=str(e))
+                continue
+            if eid and eid not in out:
+                out.append(eid)
         return {"partialSuccess": {}, "episode_ids": out}
 
     @app.post("/v1/traces", tags=["loop"])

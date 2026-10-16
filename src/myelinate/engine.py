@@ -300,9 +300,12 @@ class LearningEngine:
                      "result": red(t.result) if t.result else None, "error": red(t.error) if t.error else None}
                 if json.dumps(d, sort_keys=True) not in seen:
                     row.tool_calls = [*row.tool_calls, d]
-            if not row.messages and ep.messages:
-                row.messages = [{"role": m.role, "content": red(m.content)} for m in ep.messages]
-                row.task = row.task or (red(ep.task) if ep.task else None)
+            have = {(m["role"], m["content"]) for m in row.messages}
+            new_msgs = [{"role": m.role, "content": red(m.content)} for m in ep.messages]
+            row.messages = [*row.messages, *(m for m in new_msgs if (m["role"], m["content"]) not in have)]
+            row.task = row.task or (red(ep.task) if ep.task else None)
+            row.user_id = row.user_id or ep.scope.user_id
+            row.session_id = row.session_id or ep.session_id
             if row.outcome == Outcome.unknown.value and ep.outcome != Outcome.unknown:
                 row.outcome = ep.outcome.value
             if ep.verification and "verification" not in row.meta:
@@ -329,6 +332,38 @@ class LearningEngine:
             await ses.commit()
         await self.credit(tenant, episode_id, source="merge")  # re-credit with the (possibly) stronger signal
         return episode_id
+
+    async def ingest_trace(self, tenant: str, trace_id: str, spans: list[Any],
+                           agent_override: str | None) -> str | None:
+        """Record or extend the episode for one OTel trace. Child spans that arrive before their trace's root
+        are held (up to 500 per trace, purged after a day) and folded in when the root arrives."""
+        from .db import OtelPendingRow
+        from .otel import episode_from_spans
+
+        key = f"otel:{trace_id}"[:256] if trace_id else None
+        existing = await self._by_key(tenant, key) if key else None
+        if existing:
+            built = episode_from_spans(trace_id, spans, agent_override=agent_override, partial=True)
+            return await self.merge_episode(tenant, existing, built[0]) if built else existing
+        async with self.db.session() as ses:
+            held = await ses.get(OtelPendingRow, (tenant, trace_id)) if trace_id else None
+            prior = [tuple(x) for x in (held.spans if held else [])]
+            built = episode_from_spans(trace_id, [*prior, *spans], agent_override=agent_override)
+            if built is None:
+                if not trace_id:
+                    return None
+                if held is None:
+                    ses.add(OtelPendingRow(tenant_id=tenant, trace_id=trace_id, spans=[list(x) for x in spans][:500]))
+                else:
+                    held.spans = [*held.spans, *(list(x) for x in spans)][:500]
+                await ses.commit()
+                return None
+            if held is not None:
+                await ses.delete(held)
+                await ses.commit()
+        ep, recall_id = built
+        ep.recall_id = recall_id
+        return (await self.record(tenant, ep)).episode_id
 
     async def _by_key(self, tenant: str, key: str) -> str | None:
         async with self.db.session() as ses:
@@ -532,7 +567,7 @@ class LearningEngine:
         """Retention: episodes, recall logs (they hold query text and user ids), finished jobs, old audit entries."""
         from sqlalchemy import delete
 
-        from .db import AuditRow, JobRow
+        from .db import AuditRow, JobRow, OtelPendingRow
 
         cutoff = utcnow() - timedelta(days=self.s.episode_retention_days)
         audit_cutoff = utcnow() - timedelta(days=self.s.audit_retention_days)
@@ -543,6 +578,8 @@ class LearningEngine:
                 "jobs": (await ses.execute(delete(JobRow).where(JobRow.created_at < cutoff,
                                                                  JobRow.status.in_(["done", "failed"])))).rowcount,
                 "audit": (await ses.execute(delete(AuditRow).where(AuditRow.created_at < audit_cutoff))).rowcount,
+                "otel_pending": (await ses.execute(delete(OtelPendingRow).where(
+                    OtelPendingRow.created_at < utcnow() - timedelta(days=1)))).rowcount,
             }
             await ses.commit()
         return {k: v or 0 for k, v in out.items()}

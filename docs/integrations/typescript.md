@@ -36,7 +36,7 @@ const learner = new GatewayClient(
 
 | Method | REST call |
 |---|---|
-| `recall(scope, query, sessionId?)` | `POST /v1/recall` → `{recall_id, instructions, skills, memories, ...}` |
+| `recall(scope, query, sessionId?)` | `POST /v1/recall` → `RecallResponse`: `{recall_id, instructions, skills, skill_index, memories, profile, holdout}` |
 | `record(episode)` | `POST /v1/episodes` → `{episode_id, reflection_scheduled}`. Adds an `idempotency_key` unless you pass one. |
 | `feedback(episodeId, score, comment?, correction?)` | `POST /v1/feedback` |
 | `latestEpisode(agentId, sessionId)` | `GET /v1/episodes/latest` → episode id or `null` |

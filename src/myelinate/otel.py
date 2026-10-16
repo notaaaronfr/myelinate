@@ -106,11 +106,12 @@ def _failed(span: dict[str, Any]) -> bool:
     return _status(span).get("code") in (2, "2", "STATUS_CODE_ERROR")
 
 
-def spans_to_episodes(otlp: Any, default_agent: str = "default",
-                      agent_override: str | None = None) -> list[tuple[EpisodeIn, str | None]]:
-    """agent precedence: `myelinate.agent_id` span attribute > agent_override (X-Agent-Id) > gen_ai.agent.name."""
-    """Returns (episode, recall_id) pairs. Malformed traces are skipped, never fail the whole batch."""
-    groups: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
+Spans = list[tuple[dict[str, Any], dict[str, Any]]]  # (raw span, resource + span attributes)
+
+
+def group_spans(otlp: Any) -> dict[str, Spans]:
+    """Group an OTLP payload's spans by trace (one trace = one turn). Malformed spans are skipped."""
+    groups: dict[str, Spans] = defaultdict(list)
     for rs in _list(_dict(otlp).get("resourceSpans")):
         try:
             res = {a["key"]: _val(_dict(a.get("value"))) for a in _list(_dict(_dict(rs).get("resource")).get("attributes"))}
@@ -124,13 +125,19 @@ def spans_to_episodes(otlp: Any, default_agent: str = "default",
                     attrs = _attrs(sp)
                 except (KeyError, TypeError, AttributeError):
                     continue
-                # One trace = one turn; child spans rarely repeat gen_ai.conversation.id, so group by trace.
+                # Child spans rarely repeat gen_ai.conversation.id, so group by trace.
                 groups[str(sp.get("traceId", ""))].append((sp, {**res, **attrs}))
+    return groups
 
+
+def spans_to_episodes(otlp: Any, default_agent: str = "default",
+                      agent_override: str | None = None) -> list[tuple[EpisodeIn, str | None]]:
+    """(episode, recall_id) per complete trace. Malformed traces are skipped, never fail the whole batch.
+    Agent precedence: `myelinate.agent_id` span attribute > agent_override (X-Agent-Id) > gen_ai.agent.name."""
     episodes = []
-    for trace_id, spans in groups.items():
+    for trace_id, spans in group_spans(otlp).items():
         try:
-            ep = _episode(trace_id, spans, default_agent, agent_override)
+            ep = episode_from_spans(trace_id, spans, default_agent, agent_override)
         except Exception:  # noqa: BLE001 - one bad trace must not drop the rest
             continue
         if ep is not None:
@@ -138,15 +145,18 @@ def spans_to_episodes(otlp: Any, default_agent: str = "default",
     return episodes
 
 
-def _episode(trace_id: str, spans: list[tuple[dict[str, Any], dict[str, Any]]],
-             default_agent: str, agent_override: str | None = None) -> tuple[EpisodeIn, str | None] | None:
-    spans.sort(key=lambda x: _int(x[0].get("startTimeUnixNano")))
+def episode_from_spans(trace_id: str, spans: Spans, default_agent: str = "default",
+                       agent_override: str | None = None,
+                       partial: bool = False) -> tuple[EpisodeIn, str | None] | None:
+    """Build an episode from one trace's spans. Without an agent or model-call span this returns None, unless
+    partial=True (used to fold late child spans into an episode that already exists)."""
+    spans = sorted(spans, key=lambda x: _int(x[0].get("startTimeUnixNano")))
     op = lambda a: a.get("gen_ai.operation.name") or str(a.get("openinference.span.kind", "")).lower()  # noqa: E731
     agent_spans = [(s, a) for s, a in spans if op(a) in ("invoke_agent", "agent", "invoke_workflow")]
     chat = [(s, a) for s, a in spans if op(a) in ("chat", "generate_content", "text_completion", "llm")]
-    if not agent_spans and not chat:
+    if not agent_spans and not chat and not (partial and spans):
         return None
-    root_s, root_a = agent_spans[0] if agent_spans else chat[0]
+    root_s, root_a = agent_spans[0] if agent_spans else (chat[0] if chat else ({}, {}))
     conv = next((a["gen_ai.conversation.id"] for _, a in spans if a.get("gen_ai.conversation.id")), None)
     root_a = {"gen_ai.conversation.id": conv, **{k: v for k, v in root_a.items() if v is not None}}
 

@@ -172,6 +172,10 @@ async def handle(task: str, user_id: str, session_id: str) -> str:
 
 A callable `instruction` is used as is, so learned text containing `{braces}` is not treated as an ADK state template.
 
+Tools built once with `make_tools` aren't tied to a turn, so skills the agent loads through them aren't credited to
+the run. If that matters, pass `on_skill_loaded=` to `make_tools` with a callback that records the name for the
+current turn (e.g. appends to `t.skills_loaded`), or build the agent per turn with `t.tools`.
+
 ## A plain loop
 
 No framework, no LLM: [`examples/generic_agent.py`](https://github.com/notaaaronfr/myelinate/blob/main/examples/generic_agent.py)
@@ -263,6 +267,9 @@ Notes for client authors:
 - Retry 5xx, 429 and network errors with backoff. Keep the same `idempotency_key` across retries of one episode.
 - `agent_id` must match `^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$`.
 - `score` must be between 0.0 and 1.0.
+- `429` means a rate limit (`Retry-After: 60`) or, from endpoints that call the learning model such as `/v1/ask`, an
+  exhausted daily token budget (`Retry-After: 3600`). `/v1/ask` returns `503` (`Retry-After: 30`) when the learning
+  model is unavailable or not configured. Honour `Retry-After`.
 
 [`examples/quickstart.sh`](https://github.com/notaaaronfr/myelinate/blob/main/examples/quickstart.sh) runs the whole
 flow, including importing a skill and reading insights.

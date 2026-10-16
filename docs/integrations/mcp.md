@@ -107,8 +107,8 @@ Details:
 - `tests_passed` (boolean) with `test_details` becomes the episode's verification, the strongest learning signal.
   Encourage the model to pass real test or check output there.
 - `skills_used` credits skills the model loaded with `skill_view`.
-- `ask` needs an LLM configured on the gateway; without anything learned it answers "Nothing has been learned about
-  that yet."
+- `ask` needs the learning model: if nothing relevant was learned it answers "Nothing has been learned about that
+  yet."; otherwise, with no model configured or reachable, the call fails.
 
 The server also sends instructions on `initialize` telling the model to call `recall` at the start of a non-trivial
 task, load listed skills with `skill_view`, save durable facts with `remember`, and call `record_episode` when the task

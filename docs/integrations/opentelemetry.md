@@ -87,16 +87,22 @@ The exporter's defaults (protobuf, gzip) work as is. Your agents then export to 
 
 **One trace is one episode.** Spans are grouped by trace id, and the episode's idempotency key is `otel:<traceId>`.
 
-**Traces split across exports are merged.** Exporters often send a trace in several requests (child spans end, and
-export, before the root agent span). A later request for a trace that already has an episode is folded into it: new
-tool calls are appended, a missing outcome, verification or error is filled in, newly loaded skills are credited, and
-the reward is recomputed. An exporter retry of the same spans changes nothing, so retries never double count.
+**Traces split across exports are merged.** Exporters often send a trace in several requests, because child spans
+end and export before the root agent span. Myelinate handles every order:
 
-What is set by the first request that created the episode stays as it was: the `agent_id`, `user_id` and session,
-and the messages once present. Spans that arrive with no agent or model-call span in their request (for example a
-batch holding only tool spans) can't start an episode on their own. Put `X-Agent-Id` on the request (or
-`myelinate.agent_id` on the resource) so the agent is right whichever span arrives first. To keep traces whole anyway,
-use the Collector-contrib `groupbytrace` processor (optional).
+- **Child spans first.** Spans that arrive before any agent or model-call span of their trace (for example a batch
+  holding only tool spans) are held, then folded in when the trace's agent or model-call span arrives. Held spans
+  are kept for up to a day (`myelinate purge` removes older ones), with at most 500 per trace.
+- **Root span later.** A later request for a trace that already has an episode is folded into it:
+  - new tool calls and messages are appended;
+  - a missing outcome, verification, error, user or session is filled in;
+  - newly loaded skills are credited;
+  - the reward is recomputed.
+- **Retries.** An exporter retry of the same spans changes nothing, so retries never double count.
+
+The episode's `agent_id` is fixed by the request that created it. Send `X-Agent-Id` (or set `myelinate.agent_id`
+on the resource) so the agent is right whichever span arrives first. The Collector-contrib `groupbytrace` processor
+is not needed, but it reduces how often spans are held.
 
 **The root span.** Within a trace, the earliest span whose operation is an agent invocation is the root. If there is
 none, the earliest model-call span is used. Traces with neither are ignored. The operation is read from
