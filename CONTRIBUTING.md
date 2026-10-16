@@ -58,8 +58,8 @@ Please don't open public issues for vulnerabilities. See [SECURITY.md](https://g
 2. Merge to `main`, then tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
 3. The `Release` workflow checks that the versions match, then:
    - publishes the multi-arch image `ghcr.io/notaaaronfr/myelinate` with signed build provenance;
-   - publishes to PyPI and npm through trusted publishing (when the `PUBLISH_PYPI` / `PUBLISH_NPM` repository
-     variables are `true`);
+   - publishes to PyPI and npm through trusted publishing, with no stored tokens (when the `PUBLISH_PYPI` /
+     `PUBLISH_NPM` repository variables are `true`);
    - creates the GitHub release from the changelog.
 
 To re-run a release (for example after enabling a registry): **Actions → Release → Run workflow**, then enter the tag.

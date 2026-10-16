@@ -123,9 +123,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: npm install -g npm@latest   # trusted publishing needs a recent npm CLI
       - run: npm install --no-audit --no-fund && npm run typecheck
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}   # only needed for the very first publish
+      - run: npm publish --access public --provenance   # trusted publishing (OIDC): no token
 
   github-release:
     needs: [verify, container]

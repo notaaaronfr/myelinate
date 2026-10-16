@@ -24,7 +24,7 @@ This takes about five minutes. You run the gateway locally, give it a skill, and
 === "Docker"
 
     ```bash
-    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.2.1
+    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.2.2
     ```
 
 `MYELINATE_ENV=dev` turns authentication off and puts everything in a tenant called `dev`. Use it only on your own

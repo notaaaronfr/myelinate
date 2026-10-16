@@ -5,4 +5,4 @@ from .models import EpisodeIn, FeedbackIn, Outcome, RecallRequest, Scope
 
 __all__ = ["EmbeddedClient", "EpisodeIn", "FeedbackIn", "GatewayClient", "LearnerClient", "Outcome",
            "RecallRequest", "Scope"]
-__version__ = "0.2.1"
+__version__ = "0.2.2"

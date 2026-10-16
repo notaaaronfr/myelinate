@@ -5,6 +5,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-16
+
+### Changed
+- All three registries now publish without stored credentials: PyPI and npm through trusted publishing (OIDC), GHCR
+  through the workflow token. Every artifact carries signed provenance.
+
 ## [0.2.1] - 2026-10-16
 
 ### Fixed

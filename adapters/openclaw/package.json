@@ -1,6 +1,6 @@
 {
   "name": "@myelinate/openclaw-plugin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-learning (skills, memory, reflection, evolution) for OpenClaw agents via the Myelinate gateway",
   "type": "module",
   "main": "./dist/index.js",
