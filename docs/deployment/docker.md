@@ -10,9 +10,9 @@ declared volume). Because `MYELINATE_ENV=prod`, the gateway **refuses to start**
 `MYELINATE_BOOTSTRAP_ADMIN_KEY` or OIDC (`MYELINATE_OIDC_JWKS_URL` plus issuer and audience).
 
 !!! note "Images"
-    Until images are published to `ghcr.io/notaaaronfr/myelinate`, build your own image (see
-    [Build and publish your own image](#build-and-publish-your-own-image)). The examples below use the local tag
-    `myelinate:local`.
+    Official images are published to `ghcr.io/notaaaronfr/myelinate` for `linux/amd64` and `linux/arm64`, tagged
+    `X.Y.Z`, `X.Y` and `latest`, with signed build provenance. Pin a version in production. You can verify an image
+    with `gh attestation verify oci://ghcr.io/notaaaronfr/myelinate:0.2.0 --owner notaaaronfr`.
 
 ## Single container (SQLite)
 
@@ -20,8 +20,6 @@ Good for a pilot or a single team: one container, SQLite on a volume, with the l
 gateway process (`MYELINATE_WORKER_ENABLED` defaults to `true`).
 
 ```bash
-docker build -t myelinate:local .
-
 docker volume create myelinate-data
 docker run -d --name myelinate \
   -p 8080:8080 \
@@ -29,7 +27,7 @@ docker run -d --name myelinate \
   -e MYELINATE_BOOTSTRAP_ADMIN_KEY="$(openssl rand -base64 48)" \
   -e ANTHROPIC_API_KEY="sk-ant-..." \
   -e MYELINATE_MCP_ALLOWED_HOSTS='["localhost:*","127.0.0.1:*"]' \
-  myelinate:local
+  ghcr.io/notaaaronfr/myelinate:0.2.0
 ```
 
 Read the bootstrap key back with `docker inspect` if you generated it inline, or better, keep it in an env file you

@@ -23,7 +23,7 @@ resources:
   # - postgres-dev.yaml
 
 images:
-  # Pin a released tag (or digest) instead of latest. Until images are published to GHCR,
-  # build and push your own and point newName/newTag at it.
+  # Official multi-arch image, pinned to a release. Bump newTag (or use a digest) to upgrade;
+  # point newName at your registry to run your own build.
   - name: ghcr.io/notaaaronfr/myelinate
-    newTag: latest
+    newTag: "0.2.0"

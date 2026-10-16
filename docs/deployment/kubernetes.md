@@ -17,9 +17,9 @@ you can apply with `kubectl apply -k` or pull into your own kustomize overlay.
 | `postgres-dev.yaml` | single-replica Postgres StatefulSet, **for trying it out only** | optional |
 
 !!! note "Images"
-    The manifests reference `ghcr.io/notaaaronfr/myelinate:latest`. Until images are published there, build and push
-    your own (see [Docker](docker.md#build-and-publish-your-own-image)) and override the image in
-    `kustomization.yaml`. Pin a version tag or digest in production.
+    The manifests use the official multi-arch image `ghcr.io/notaaaronfr/myelinate`, pinned to `0.2.0` in
+    `kustomization.yaml`. Bump `newTag` (or pin a digest) to upgrade. To run your own build, see
+    [Docker](docker.md#build-and-publish-your-own-image) and change `newName`.
 
 ## Architecture
 
