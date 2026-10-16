@@ -1,0 +1,33 @@
+# Non-secret settings. Every key is a Settings field in src/myelinate/config.py, as MYELINATE_<FIELD>.
+# List values are JSON. See docs/reference/configuration.md for the full list.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myelinate-config
+  namespace: myelinate
+data:
+  MYELINATE_ENV: "prod"
+  MYELINATE_LLM_PROVIDER: "anthropic"          # "none" disables learning-side LLM calls
+  MYELINATE_LLM_MODEL: "claude-opus-5-5"
+  MYELINATE_LLM_EFFORT: "medium"
+  MYELINATE_DAILY_TOKEN_BUDGET: "5000000"      # per tenant, learning side; 0 = unlimited
+  # Must include the public host clients use for /mcp (DNS-rebinding protection). Ports may be wildcarded.
+  MYELINATE_MCP_ALLOWED_HOSTS: '["myelinate.example.com","localhost:*","127.0.0.1:*"]'
+  MYELINATE_CORS_ORIGINS: '[]'                 # browser origins allowed to call the API; empty = no CORS
+  MYELINATE_RATE_LIMIT_PER_MINUTE: "600"       # per principal, per gateway replica (in-memory)
+  MYELINATE_IP_RATE_LIMIT_PER_MINUTE: "3000"   # per client IP, per replica, before auth
+  MYELINATE_REDACT_PII: "true"
+  MYELINATE_EPISODE_RETENTION_DAYS: "90"
+  MYELINATE_AUTO_APPROVE_MEMORIES: "true"
+  MYELINATE_AUTO_APPROVE_LOW_RISK: "true"
+  MYELINATE_AUTO_APPROVE_MEDIUM_RISK: "false"
+  MYELINATE_CANARY_ENABLED: "true"
+  MYELINATE_HOLDOUT_RATE: "0.05"
+  # Optional SSO (Entra ID / Okta / Auth0 / Keycloak):
+  # MYELINATE_OIDC_ISSUER: "https://login.microsoftonline.com/<tenant>/v2.0"
+  # MYELINATE_OIDC_AUDIENCE: "api://myelinate"
+  # MYELINATE_OIDC_JWKS_URL: "https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys"
+  # MYELINATE_OIDC_TENANT_CLAIM: "tid"
+  # Optional embeddings (any /v1/embeddings-compatible endpoint):
+  # MYELINATE_EMBEDDINGS_URL: "https://api.voyageai.com/v1/embeddings"
+  # MYELINATE_EMBEDDINGS_MODEL: "voyage-3.5"

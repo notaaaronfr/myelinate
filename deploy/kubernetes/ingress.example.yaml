@@ -1,0 +1,31 @@
+# EXAMPLE. Adjust host, ingressClassName and TLS to your cluster. Not listed in kustomization.yaml.
+# Remember: add the host to MYELINATE_MCP_ALLOWED_HOSTS in configmap.yaml, or /mcp rejects requests.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myelinate
+  namespace: myelinate
+  annotations:
+    # cert-manager issues the TLS certificate (remove if you manage certificates another way).
+    cert-manager.io/cluster-issuer: letsencrypt
+    # ingress-nginx: allow request bodies up to MYELINATE_MAX_REQUEST_BYTES (4 MB default) and keep
+    # long learning calls (e.g. /v1/ask, replay) from timing out at the proxy.
+    nginx.ingress.kubernetes.io/proxy-body-size: "4m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    # Optional coarse rate limiting at the edge (Myelinate's own limits are per replica):
+    # nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: ["myelinate.example.com"]
+      secretName: myelinate-tls
+  rules:
+    - host: myelinate.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myelinate-gateway
+                port: { name: http }

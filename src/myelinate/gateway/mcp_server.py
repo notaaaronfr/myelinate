@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 
+from .. import __version__
 from ..core import NotFound
 from ..engine import LearningEngine
 from ..models import (
@@ -32,7 +33,7 @@ if you have them) so the agent learns from it."""
 
 
 def build_mcp(engine: LearningEngine, auth: Authenticator, limiter: RateLimiter | None = None) -> MCPServer:
-    mcp = MCPServer(name="myelinate", instructions=INSTRUCTIONS, version="0.2.0")
+    mcp = MCPServer(name="myelinate", instructions=INSTRUCTIONS, version=__version__)
 
     async def principal(ctx: Context, scope: str = "learn") -> Principal:
         try:

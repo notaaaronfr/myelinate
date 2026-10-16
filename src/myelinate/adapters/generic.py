@@ -65,7 +65,8 @@ class SelfLearning:
     @contextlib.asynccontextmanager
     async def turn(self, task: str, *, user_id: str | None = None, session_id: str | None = None) -> AsyncIterator[Turn]:
         scope = Scope(agent_id=self.agent_id, user_id=user_id)
-        t = Turn(messages=[Message(role="user", content=task)], tools=make_tools(self.client, self.agent_id, user_id))
+        t = Turn(messages=[Message(role="user", content=task)])
+        t.tools = make_tools(self.client, self.agent_id, user_id, on_skill_loaded=t.skills_loaded.append)
         try:
             r = await self.client.recall(RecallRequest(scope=scope, query=task, session_id=session_id))
             t.instructions, t.recall_id = r.instructions, r.recall_id

@@ -10,7 +10,7 @@ import re
 
 _PII = [
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
-    ("CARD", re.compile(r"\b(?:\d[ -]?){13,19}\b")),
+    ("CARD", re.compile(r"\b\d(?:[ -]?\d){12,18}\b")),
     ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
     ("PHONE", re.compile(r"(?<!\w)\+?\d{1,3}[ .-]?\(?\d{2,4}\)?[ .-]?\d{3,4}[ .-]?\d{3,4}(?!\w)")),
     ("IBAN", re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b")),
@@ -23,7 +23,7 @@ _SECRETS = [
     ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b")),
     ("slack_token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
-    ("password_assignment", re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key)\s*[:=]\s*\S{6,}")),
+    ("password_assignment", re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key)\s*[:=]\s*(?!\[)\S{6,}")),
 ]
 
 _INJECTION = [
@@ -45,7 +45,7 @@ def redact(text: str) -> str:
     for label, pat in _PII:
         text = pat.sub(f"[{label}]", text)
     for label, pat in _SECRETS:
-        text = pat.sub(f"[SECRET:{label}]", text)
+        text = pat.sub(f"[REDACTED {label}]", text)
     return text
 
 

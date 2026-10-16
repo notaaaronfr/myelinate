@@ -13,7 +13,9 @@ Section = Literal["steps", "pitfalls", "heuristics", "verification", "snippets",
 SKILL_NAME = r"^[a-z0-9][a-z0-9-]{1,63}$"
 
 
-AGENT_ID = r"^[A-Za-z0-9*][A-Za-z0-9._:@/-]{0,127}$"
+AGENT_ID = r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127}$"
+# "*" = knowledge shared by every agent in the tenant; only writable through review-scoped skill endpoints.
+SHARED_OR_AGENT_ID = r"^(\*|[A-Za-z0-9][A-Za-z0-9._:@/-]{0,127})$"
 
 
 class Scope(BaseModel):
@@ -171,7 +173,7 @@ class Skill(BaseModel):
 
 
 class SkillIn(BaseModel):
-    agent_id: str = Field(default="default", pattern=AGENT_ID)
+    agent_id: str = Field(default="default", pattern=SHARED_OR_AGENT_ID)
     name: str = Field(pattern=SKILL_NAME)
     description: str = Field(max_length=1024)
     bullets: list[BulletIn] | None = None
@@ -182,7 +184,7 @@ class SkillIn(BaseModel):
 class SkillImport(BaseModel):
     """Import an existing SKILL.md (Anthropic / Hermes / agentskills.io format)."""
 
-    agent_id: str = Field(default="default", pattern=AGENT_ID)
+    agent_id: str = Field(default="default", pattern=SHARED_OR_AGENT_ID)
     markdown: str = Field(max_length=200_000)
 
 

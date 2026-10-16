@@ -65,6 +65,9 @@ class Authenticator:
         self.anonymous_dev = (settings.env == "dev" and settings.bootstrap_admin_key is None and self._jwks is None)
         if settings.env == "prod" and settings.bootstrap_admin_key is None and self._jwks is None:
             raise RuntimeError("prod requires MYELINATE_BOOTSTRAP_ADMIN_KEY or OIDC configuration")
+        if self._jwks is not None and settings.env != "dev" and not (settings.oidc_issuer and settings.oidc_audience):
+            # Without both, any token signed by the JWKS keys (e.g. issued for another app) would be accepted.
+            raise RuntimeError("OIDC requires MYELINATE_OIDC_ISSUER and MYELINATE_OIDC_AUDIENCE outside dev")
         if self.anonymous_dev:
             log.warning("auth.disabled", reason="dev mode with no credentials configured; tenant='dev'")
 
@@ -118,8 +121,15 @@ class Authenticator:
         tenant = claims.get(self.s.oidc_tenant_claim)
         if not tenant:
             raise AuthError(403, f"token has no '{self.s.oidc_tenant_claim}' claim")
-        raw = claims.get("scp") or claims.get("scope") or ""
-        scopes = set(raw.split() if isinstance(raw, str) else raw) | set(claims.get("roles", []))
+        def as_set(v: object) -> set[str]:
+            if isinstance(v, str):
+                return set(v.split())
+            return {str(x) for x in v} if isinstance(v, list) else set()
+
+        scopes = (as_set(claims.get("scp") or claims.get("scope") or "")  # Entra ID / Okta / generic
+                  | as_set(claims.get("roles"))  # Entra ID app roles
+                  | as_set(claims.get("permissions"))  # Auth0 RBAC
+                  | as_set((claims.get("realm_access") or {}).get("roles")))  # Keycloak realm roles
         scopes = {s.removeprefix("myelinate.") for s in scopes}
         return Principal(str(tenant), f"oidc:{claims['sub']}", frozenset(scopes) & ALL_SCOPES)
 

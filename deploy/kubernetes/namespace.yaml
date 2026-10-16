@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: myelinate
+  labels:
+    app.kubernetes.io/part-of: myelinate
+    # Enforce the "restricted" Pod Security Standard; every Myelinate pod here complies.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

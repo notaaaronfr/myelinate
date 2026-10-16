@@ -1,6 +1,6 @@
 [project]
 name = "myelinate"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-improving skills and memory for any AI agent framework, with governance built in"
 readme = "README.md"
 license = "MIT"
@@ -25,6 +25,7 @@ dependencies = [
     "fastapi>=0.143.2",
     "httpx>=0.28.1",
     "mcp>=2.3.0",
+    "opentelemetry-proto>=1.45.1",
     "prometheus-client>=0.26.0",
     "pydantic>=2.14.1",
     "pydantic-settings>=2.16.0",
@@ -62,6 +63,9 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "ruff>=0.17.1",
+]
+docs = [
+    "mkdocs-material>=9.7.7",
 ]
 
 [tool.pytest.ini_options]

@@ -198,7 +198,8 @@ class LearningEngine:
                        "wrong for this situation, don't follow it." + cite)
             for k in skills:
                 bl = [b.model_dump() for b in k.bullets or []]
-                out.append(f"### {k.name}\n{k.description}\n\n{render_bullets(bl, with_ids=self.s.ask_for_citations)}")
+                out.append(f"### {k.name}\n{k.description}\n\n"
+                           f"{render_bullets(bl, with_ids=self.s.ask_for_citations, presorted=True)}")
         if index:
             out.append("## Other learned skills\nLoad one with the `skill_view` tool if it applies:\n"
                        + "\n".join(f"- {k.name}: {k.description}" for k in index))
@@ -285,6 +286,49 @@ class LearningEngine:
         await self.credit(tenant, row.id, source="record")
         metrics.episodes.labels(outcome=ep.outcome.value, framework=ep.framework or "unknown").inc()
         return EpisodeOut(episode_id=row.id, reflection_scheduled=should)
+
+    async def merge_episode(self, tenant: str, episode_id: str, ep: EpisodeIn) -> str:
+        """Fold a later partial view of the same run (e.g. a trace exported in pieces) into its episode."""
+        red = safety.redact if self.s.redact_pii else (lambda x: x)
+        async with self.db.session() as ses:
+            row = await ses.scalar(select(EpisodeRow).where(EpisodeRow.id == episode_id).with_for_update())
+            if row is None or row.tenant_id != tenant:
+                raise NotFound(episode_id)
+            seen = {json.dumps(t, sort_keys=True) for t in row.tool_calls}
+            for t in ep.tool_calls:
+                d = {"name": t.name, "arguments": red(str(t.arguments)) if t.arguments is not None else None,
+                     "result": red(t.result) if t.result else None, "error": red(t.error) if t.error else None}
+                if json.dumps(d, sort_keys=True) not in seen:
+                    row.tool_calls = [*row.tool_calls, d]
+            if not row.messages and ep.messages:
+                row.messages = [{"role": m.role, "content": red(m.content)} for m in ep.messages]
+                row.task = row.task or (red(ep.task) if ep.task else None)
+            if row.outcome == Outcome.unknown.value and ep.outcome != Outcome.unknown:
+                row.outcome = ep.outcome.value
+            if ep.verification and "verification" not in row.meta:
+                row.meta = {**row.meta, "verification": {"passed": ep.verification.passed,
+                                                         "source": ep.verification.source,
+                                                         "details": red(ep.verification.details or "")}}
+            if ep.error and not row.error:
+                row.error = red(ep.error)
+            if ep.skills_loaded and not row.holdout:
+                skills, _ = await self.gov.library(ses, tenant, row.agent_id)
+                have = {x["skill_id"] for x in row.served}
+                new = [skills[n] for n in dict.fromkeys(slug(x) for x in ep.skills_loaded)
+                       if n in skills and skills[n].id not in have]
+                if new:
+                    row.served = [*row.served, *({"skill_id": k.id, "version": k.version, "arm": None, "exp": None,
+                                                  "loaded": True} for k in new)]
+                    await ses.execute(update(SkillRow).where(SkillRow.id.in_([k.id for k in new]))
+                                      .values(uses=SkillRow.uses + 1, last_used_at=utcnow()))
+                    prior = row.meta.get("credited")
+                    if prior is not None:  # bring late-added skills up to the reward already credited to the rest
+                        await ses.execute(update(SkillRow).where(SkillRow.id.in_([k.id for k in new])).values(
+                            alpha=SkillRow.alpha + prior, beta=SkillRow.beta + (1 - prior),
+                            successes=SkillRow.successes + prior))
+            await ses.commit()
+        await self.credit(tenant, episode_id, source="merge")  # re-credit with the (possibly) stronger signal
+        return episode_id
 
     async def _by_key(self, tenant: str, key: str) -> str | None:
         async with self.db.session() as ses:
@@ -463,7 +507,7 @@ class LearningEngine:
             "pending_changesets": pending,
             "problem_rules": [{"id": b.id, "content": b.content, "helpful": b.helpful, "harmful": b.harmful}
                               for b in bad],
-            "learning_cost_30d": {
+            "tenant_learning_cost_30d": {  # usage is metered per tenant, not per agent
                 "calls": sum(u.calls for u in usage),
                 "input_tokens": sum(u.input_tokens for u in usage),
                 "output_tokens": sum(u.output_tokens for u in usage),
@@ -484,12 +528,24 @@ class LearningEngine:
                                   "holdout": e.holdout, "framework": e.framework,
                                   "created_at": e.created_at.isoformat()}) + "\n"
 
-    async def purge_expired(self) -> int:
+    async def purge_expired(self) -> dict[str, int]:
+        """Retention: episodes, recall logs (they hold query text and user ids), finished jobs, old audit entries."""
+        from sqlalchemy import delete
+
+        from .db import AuditRow, JobRow
+
         cutoff = utcnow() - timedelta(days=self.s.episode_retention_days)
+        audit_cutoff = utcnow() - timedelta(days=self.s.audit_retention_days)
         async with self.db.session() as ses:
-            res = await ses.execute(EpisodeRow.__table__.delete().where(EpisodeRow.created_at < cutoff))
+            out = {
+                "episodes": (await ses.execute(delete(EpisodeRow).where(EpisodeRow.created_at < cutoff))).rowcount,
+                "recalls": (await ses.execute(delete(RecallRow).where(RecallRow.created_at < cutoff))).rowcount,
+                "jobs": (await ses.execute(delete(JobRow).where(JobRow.created_at < cutoff,
+                                                                 JobRow.status.in_(["done", "failed"])))).rowcount,
+                "audit": (await ses.execute(delete(AuditRow).where(AuditRow.created_at < audit_cutoff))).rowcount,
+            }
             await ses.commit()
-            return res.rowcount or 0
+        return {k: v or 0 for k, v in out.items()}
 
 
 __all__ = ["Conflict", "LearningEngine", "NotFound", "REWARD"]

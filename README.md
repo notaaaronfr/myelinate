@@ -3,8 +3,15 @@
 [![CI](https://github.com/notaaaronfr/myelinate/actions/workflows/ci.yml/badge.svg)](https://github.com/notaaaronfr/myelinate/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![Docs](https://img.shields.io/badge/docs-notaaaronfr.github.io%2Fmyelinate-6f42c1)](https://notaaaronfr.github.io/myelinate/)
 
 **Self-improving skills and memory for any AI agent framework, with governance built in.**
+
+**[Documentation](https://notaaaronfr.github.io/myelinate/)** ·
+[Quickstart](https://notaaaronfr.github.io/myelinate/getting-started/quickstart/) ·
+[Integrations](https://notaaaronfr.github.io/myelinate/integrations/overview/) ·
+[Deployment](https://notaaaronfr.github.io/myelinate/deployment/kubernetes/) ·
+[API reference](https://notaaaronfr.github.io/myelinate/reference/api/)
 
 > *Myelin* is the sheath the brain builds around pathways that get used, and that work, so they fire faster and more
 > reliably. Myelinate does the same for agents: rules that help get reinforced, rules that hurt get corrected or retired,
@@ -123,7 +130,7 @@ open http://localhost:8080/docs
 Without `MYELINATE_ENV=dev` the gateway is secure by default: it refuses to start without a bootstrap admin key
 or OIDC configuration.
 
-Production: `cp .env.example .env`, then `docker compose -f deploy/docker-compose.yml up -d`. That runs the gateway, a
+Production: `cp .env.example .env`, edit it, then `docker compose --env-file .env -f deploy/docker-compose.yml up -d`. That runs the gateway, a
 worker pool and Postgres. Mint scoped keys with `POST /v1/admin/api-keys`.
 
 ## Plugging in
@@ -143,10 +150,11 @@ context, `agent_end` records the run, and it adds the tools `skill_view` (credit
 diagnostics-otel, or LangGraph/CrewAI through OpenInference):
 ```bash
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://learner.internal/v1/traces
-OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf          # http/json works too; gzip is accepted
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer myl_...,X-Agent-Id=support-bot"
 ```
-`gen_ai.skill.name` spans credit skills automatically. Set the span attributes `myelinate.outcome` /
+Spans of one trace that arrive in separate exports are merged into one episode. `gen_ai.skill.name` spans credit
+skills automatically. Set the span attributes `myelinate.outcome` /
 `myelinate.verification.passed` to add labels. Recall still needs one call, or the MCP tool, for the agent to
 *use* what was learned.
 
@@ -220,7 +228,7 @@ src/myelinate/
   core.py         metered LLM, budgets, jobs, audit           worker.py  durable job worker
   gateway/        FastAPI app, auth/RBAC, MCP server          adapters/  maf.py, generic.py
 adapters/openclaw TypeScript plugin + reusable TS client
-tests/            51 tests: loop, gating, tagging, canary, GEPA, memory, dedup, lift, OTel, import, auth, MCP, budget,
+tests/            59 tests: loop, gating, tagging, canary, GEPA, memory, dedup, lift, OTel, import, auth, MCP, budget,
                   concurrency, idempotency, SDK request shape, regressions
 ```
 
@@ -228,7 +236,7 @@ tests/            51 tests: loop, gating, tagging, canary, GEPA, memory, dedup, 
 
 | Check | Result |
 |---|---|
-| Test suite (51 tests) | Passes on SQLite and on PostgreSQL 17 (`MYELINATE_TEST_DATABASE_URL=postgresql+asyncpg://… uv run pytest`), with 5 repeated runs and no flakes |
+| Test suite (59 tests) | Passes on SQLite and on PostgreSQL 17 (`MYELINATE_TEST_DATABASE_URL=postgresql+asyncpg://… uv run pytest`), with 5 repeated runs and no flakes |
 | Microsoft Agent Framework adapter | Runs inside a real `agent_framework` 1.22 `Agent` (test) |
 | OpenClaw plugin | Type-checks against the real `openclaw@2026.10.4` SDK. Installs, enables, passes `plugins doctor`, and its hooks and tools register in the real runtime (`inspect --runtime`). **Real agent turns with `anthropic/claude-opus-5-5` close the loop:** (1) the agent followed an injected skill exactly; (2) a user correction given in chat reached the gateway through `rate_last_turn`; (3) Claude reflected and proposed a rule update, which policy held for review; (4) after approval, a brand-new session produced the corrected format |
 | Docker | `docker build` succeeds (415 MB, non-root). `docker compose` (gateway, 2 workers, Postgres) reaches healthy on every service. A failed production migration recorded via the API was learned by a worker replica with real Claude into a correct `postgres-schema-migration` skill stored in Postgres |
@@ -245,11 +253,11 @@ against a real identity provider (JWT validation is implemented, but was not tes
 - **Learning quality is bounded by signal quality.** Wire `verify_fn` / `t.verify()` / feedback to real checks where
   you can. Without them the system stays conservative (memories only).
 - **The LLM judge used in evolution is a proxy.** That is why changed proven skills are canaried on live traffic. Canaries
-  need traffic: with few runs per skill, keep `AUTO_APPROVE_MEDIUM_RISK=false` and review.
+  need traffic: with few runs per skill, keep `MYELINATE_AUTO_APPROVE_MEDIUM_RISK=false` and review.
 - **Migrations.** Tables are created at startup. Add Alembic before your first production schema change.
 - **Scale.** Lexical retrieval over a few thousand skills per agent is fine. Beyond that, configure embeddings and move them
   to pgvector. The rate limiter is per process; put a shared limiter in front of multiple replicas.
-- **OTLP** is accepted as JSON (`http/json`). Protobuf needs a collector in front.
+- **OTLP** is accepted over HTTP (protobuf or JSON, gzip or not). gRPC needs a Collector in front.
 - **The OpenClaw plugin** targets `openclaw@2026.10.4` (Node ≥24.16 <25 or ≥26.1). Re-run `npx tsc` against newer
   SDK versions when upgrading.
 

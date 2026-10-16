@@ -49,6 +49,10 @@ class AnthropicLLM:
             raise LLMError(f"api error {e.status_code}: {e}") from e
         except anthropic.APIConnectionError as e:
             raise LLMError(f"connection error: {e}") from e
+        except anthropic.AnthropicError as e:
+            raise LLMError(f"anthropic error: {e}") from e
+        except TypeError as e:  # raised by the SDK when no API key / auth method can be resolved
+            raise LLMError(f"no Anthropic credentials configured ({e})") from e
         if usage and resp.usage:  # all input the request consumed: uncached + cache writes + cache reads
             u = resp.usage
             usage(u.input_tokens + (u.cache_creation_input_tokens or 0) + (u.cache_read_input_tokens or 0),

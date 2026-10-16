@@ -1,0 +1,78 @@
+# Learning workers: reflection, curation, evolution, canary bookkeeping. No API port; metrics on 9464.
+# Workers coordinate through the database `jobs` table (conditional claim + lease), so replicas are safe.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myelinate-worker
+  namespace: myelinate
+  labels:
+    app.kubernetes.io/name: myelinate
+    app.kubernetes.io/component: worker
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: myelinate
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: myelinate
+        app.kubernetes.io/component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9464"
+        prometheus.io/path: /metrics
+    spec:
+      automountServiceAccountToken: false
+      # On SIGTERM the worker stops claiming jobs and finishes in-flight ones (up to 30 s).
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: ghcr.io/notaaaronfr/myelinate:latest
+          imagePullPolicy: IfNotPresent
+          args: ["myelinate", "worker"]
+          ports:
+            - { name: metrics, containerPort: 9464 }
+          envFrom:
+            - configMapRef: { name: myelinate-config }
+            - secretRef: { name: myelinate-secrets }
+          env:
+            - name: MYELINATE_WORKER_HEARTBEAT_FILE
+              value: /tmp/worker.alive
+          # The worker touches its heartbeat file every 10 s from a dedicated task, even during long jobs.
+          readinessProbe:
+            exec:
+              command: ["myelinate", "healthcheck", "--max-age", "60"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["myelinate", "healthcheck", "--max-age", "60"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 64Mi }

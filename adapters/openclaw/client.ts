@@ -11,8 +11,11 @@ export interface Scope {
 export interface RecallResponse {
   recall_id: string;
   instructions: string;
-  skills: { id: string; name: string; description: string; version: number; score: number }[];
+  skills: { id: string; name: string; description: string; version: number; score: number; arm?: string | null }[];
+  skill_index: { id: string; name: string; description: string; version: number; score: number }[];
   memories: { id: string; kind: string; content: string; score: number }[];
+  profile: string | null;
+  holdout: boolean;
 }
 
 export interface EpisodeIn {

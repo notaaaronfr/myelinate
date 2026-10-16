@@ -1,6 +1,7 @@
 """Zero-code ingestion: OTLP/HTTP JSON traces -> episodes.
 
-Frameworks that emit OpenTelemetry GenAI spans (Microsoft Agent Framework, Google ADK, Strands,
+Accepts OTLP/HTTP protobuf or JSON, gzip-compressed or not, so standard OpenTelemetry SDK exporters and the
+Collector work unchanged. Frameworks that emit OpenTelemetry GenAI spans (Microsoft Agent Framework, Google ADK, Strands,
 Pydantic AI, OpenClaw's diagnostics-otel, CrewAI/LangGraph via instrumentors) can feed the learning
 loop by adding this gateway as an OTLP exporter endpoint: no adapter code at all.
 
@@ -11,7 +12,7 @@ Understood conventions:
 - OpenInference (Arize/Phoenix instrumentors): openinference.span.kind, input.value / output.value,
   tool.name, llm.input_messages.N.message.role/content.
 - OpenClaw diagnostics: `tool.execution` spans.
-- Correlation: a `myelinate.recall_id` attribute (set by our adapters) links the trace to its recall;
+- Correlation: a `myelinate.recall_id` span attribute (set it in your app when you call recall) links the trace;
   `myelinate.outcome` / `myelinate.verification.passed` carry labels when the app has them.
 
 Spans are grouped per trace (one turn); the conversation id becomes the session id. Only content the exporter chose to capture
@@ -20,6 +21,7 @@ Spans are grouped per trace (one turn); the conversation id becomes the session 
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections import defaultdict
@@ -104,7 +106,9 @@ def _failed(span: dict[str, Any]) -> bool:
     return _status(span).get("code") in (2, "2", "STATUS_CODE_ERROR")
 
 
-def spans_to_episodes(otlp: Any, default_agent: str = "default") -> list[tuple[EpisodeIn, str | None]]:
+def spans_to_episodes(otlp: Any, default_agent: str = "default",
+                      agent_override: str | None = None) -> list[tuple[EpisodeIn, str | None]]:
+    """agent precedence: `myelinate.agent_id` span attribute > agent_override (X-Agent-Id) > gen_ai.agent.name."""
     """Returns (episode, recall_id) pairs. Malformed traces are skipped, never fail the whole batch."""
     groups: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
     for rs in _list(_dict(otlp).get("resourceSpans")):
@@ -126,7 +130,7 @@ def spans_to_episodes(otlp: Any, default_agent: str = "default") -> list[tuple[E
     episodes = []
     for trace_id, spans in groups.items():
         try:
-            ep = _episode(trace_id, spans, default_agent)
+            ep = _episode(trace_id, spans, default_agent, agent_override)
         except Exception:  # noqa: BLE001 - one bad trace must not drop the rest
             continue
         if ep is not None:
@@ -135,7 +139,7 @@ def spans_to_episodes(otlp: Any, default_agent: str = "default") -> list[tuple[E
 
 
 def _episode(trace_id: str, spans: list[tuple[dict[str, Any], dict[str, Any]]],
-             default_agent: str) -> tuple[EpisodeIn, str | None] | None:
+             default_agent: str, agent_override: str | None = None) -> tuple[EpisodeIn, str | None] | None:
     spans.sort(key=lambda x: _int(x[0].get("startTimeUnixNano")))
     op = lambda a: a.get("gen_ai.operation.name") or str(a.get("openinference.span.kind", "")).lower()  # noqa: E731
     agent_spans = [(s, a) for s, a in spans if op(a) in ("invoke_agent", "agent", "invoke_workflow")]
@@ -181,7 +185,7 @@ def _episode(trace_id: str, spans: list[tuple[dict[str, Any], dict[str, Any]]],
         ver = Verification(passed=_bool(root_a["myelinate.verification.passed"]), source="otel",
                            details=_str(root_a.get("myelinate.verification.details")))
     start, end = _int(root_s.get("startTimeUnixNano")), _int(root_s.get("endTimeUnixNano"))
-    agent = str(root_a.get("myelinate.agent_id") or root_a.get("gen_ai.agent.name") or default_agent)
+    agent = str(root_a.get("myelinate.agent_id") or agent_override or root_a.get("gen_ai.agent.name") or default_agent)
     if not re.match(AGENT_ID, agent):
         agent = default_agent
     ep = EpisodeIn(
@@ -205,3 +209,42 @@ def _str(v: Any) -> str | None:
     if v is None:
         return None
     return v if isinstance(v, str) else json.dumps(v)
+
+
+def decode_otlp(body: bytes, content_type: str, content_encoding: str, max_bytes: int) -> Any:
+    """OTLP/HTTP request body -> OTLP JSON-shaped dict. Supports protobuf and JSON, gzip or identity.
+
+    Raises ValueError for undecodable bodies (mapped to 400) and LookupError for unsupported types (415)."""
+    import zlib
+
+    if content_encoding.strip().lower() in ("gzip", "x-gzip"):
+        d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        body = d.decompress(body, max_bytes + 1)
+        if len(body) > max_bytes or d.unconsumed_tail:
+            raise ValueError("decompressed body too large")
+    elif content_encoding.strip().lower() not in ("", "identity"):
+        raise LookupError(f"unsupported content-encoding {content_encoding!r}")
+    ctype = content_type.split(";")[0].strip().lower()
+    if ctype in ("application/x-protobuf", "application/protobuf"):
+        from google.protobuf import json_format
+        from google.protobuf.message import DecodeError
+        from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+
+        try:
+            req = ExportTraceServiceRequest.FromString(body)
+        except DecodeError as e:
+            raise ValueError(f"invalid OTLP protobuf: {e}") from e
+        data = json_format.MessageToDict(req)
+        for rs in data.get("resourceSpans", []):  # protobuf JSON mapping base64-encodes ids; OTLP/JSON uses hex
+            for ss in rs.get("scopeSpans", []):
+                for sp in ss.get("spans", []):
+                    for k in ("traceId", "spanId", "parentSpanId"):
+                        if sp.get(k):
+                            sp[k] = base64.b64decode(sp[k]).hex()
+        return data
+    if ctype == "application/json":
+        try:
+            return json.loads(body)
+        except (ValueError, UnicodeDecodeError) as e:
+            raise ValueError(f"invalid JSON: {e}") from e
+    raise LookupError(f"unsupported content-type {content_type!r}; use application/x-protobuf or application/json")

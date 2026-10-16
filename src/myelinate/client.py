@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from collections.abc import Callable
 from typing import Any, Protocol
 
 import httpx
@@ -46,7 +47,7 @@ class GatewayClient:
                  retries: int = 2, transport: httpx.AsyncBaseTransport | None = None) -> None:
         base_url = base_url or os.environ.get("MYELINATE_URL", "http://localhost:8080")
         api_key = api_key or os.environ.get("MYELINATE_API_KEY")
-        headers = {"user-agent": "myelinate-py/0.1"}
+        headers = {"user-agent": "myelinate-py/0.2"}
         if api_key:
             headers["authorization"] = f"Bearer {api_key}"
         self._http = httpx.AsyncClient(base_url=base_url, headers=headers, timeout=timeout, transport=transport)
@@ -112,7 +113,7 @@ class EmbeddedClient:
 
         s = settings or get_settings()
         self.tenant = tenant_id
-        self.db = Database(s.database_url)
+        self.db = Database(s.database_url, s.db_pool_size, s.db_max_overflow)
         self.engine = LearningEngine(self.db, s, llm or build_llm(s), build_embedder(s))
         self.worker = Worker(self.engine)
         self._started = False
@@ -153,12 +154,18 @@ class EmbeddedClient:
         await self.db.close()
 
 
-def make_tools(client: LearnerClient, agent_id: str, user_id: str | None = None) -> list[Any]:
-    """Plain async functions with docstrings: most frameworks (MAF, LangChain, CrewAI...) accept these as tools."""
+def make_tools(client: LearnerClient, agent_id: str, user_id: str | None = None,
+               on_skill_loaded: Callable[[str], None] | None = None) -> list[Any]:
+    """Plain async functions with docstrings: most frameworks (MAF, LangChain, CrewAI...) accept these as tools.
+
+    on_skill_loaded is called with each skill name the agent loads, so the run's outcome can be credited to it."""
 
     async def skill_view(name: str) -> str:
         """Load the full instructions of a learned skill by its name."""
-        return await client.skill_markdown(agent_id, name) or f"No skill named '{name}'."
+        md = await client.skill_markdown(agent_id, name)
+        if md and on_skill_loaded:
+            on_skill_loaded(name)
+        return md or f"No skill named '{name}'."
 
     async def remember(content: str, kind: str = "fact") -> str:
         """Save one short durable memory. kind is 'fact', 'preference' (about the user) or 'lesson' (a mistake

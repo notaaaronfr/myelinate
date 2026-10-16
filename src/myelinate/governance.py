@@ -293,11 +293,13 @@ class Governance:
         if cs is not None:
             if verdict == xp.Verdict.promote:
                 await self._apply(ses, exp.tenant_id, "system:canary", cs)
+                metrics.changesets.labels(source=cs.source, status=cs.status).inc()
                 self.c.audit(ses, exp.tenant_id, "system:canary", "canary.promoted", cs.id, p_better=round(p, 3),
                              result=cs.status)
             else:
                 cs.status = "rejected"
                 cs.rejection_reason = reason or f"canary: P(candidate better)={p:.2f} after live traffic"
+                metrics.changesets.labels(source=cs.source, status=cs.status).inc()
                 self.c.audit(ses, exp.tenant_id, "system:canary", f"canary.{exp.status}", cs.id, p_better=round(p, 3))
         await self.release_queue(ses, exp.tenant_id, exp.skill_id)
 
@@ -310,6 +312,7 @@ class Governance:
         for q in queued:
             if skill_id in q.base_versions:
                 await self._approve(ses, tenant, q.reviewer or "system", q, skip_canary=False)
+                metrics.changesets.labels(source=q.source, status=q.status).inc()
 
     async def expire_experiments(self, tenant: str) -> int:
         """Canaries that can't reach a verdict (too little traffic, skill archived) keep the incumbent."""
@@ -343,8 +346,10 @@ class Governance:
             stopped = list((await self.running_experiments(ses, [skill_id])).values())
             for exp in stopped:
                 exp.status, exp.decided_at = "rejected", utcnow()
+                metrics.experiments.labels(verdict="rejected").inc()
                 if cs := await ses.get(ChangesetRow, exp.changeset_id):
                     cs.status, cs.rejection_reason = "rejected", f"rolled back by {actor}"
+                    metrics.changesets.labels(source=cs.source, status="rejected").inc()
             keep = {b["id"]: b for b in snap.bullets}
             for b in (await ses.scalars(select(BulletRow).where(BulletRow.skill_id == skill_id))).all():
                 if b.id in keep:

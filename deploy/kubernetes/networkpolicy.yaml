@@ -1,0 +1,63 @@
+# OPTIONAL. Not listed in kustomization.yaml by default: enable it once you have checked the selectors below
+# against your cluster. Requires a CNI that enforces NetworkPolicy (Calico, Cilium, k3s' kube-router, ...).
+#
+# What it does:
+#   1. Denies all ingress to pods in this namespace by default.
+#   2. Allows the gateway to receive traffic on :8080 from your ingress controller's namespace
+#      (and, optionally, from your Prometheus namespace for /metrics).
+#   3. Allows Myelinate pods to reach the in-cluster dev Postgres (only relevant with postgres-dev.yaml).
+#
+# Egress is left open here. To lock it down, add an egress policy that allows only:
+#   - DNS (kube-dns, UDP/TCP 53)
+#   - your Postgres endpoint (TCP 5432)
+#   - the LLM API (api.anthropic.com:443) and your embeddings endpoint, if any
+#   - your OTLP collector, if you export traces
+# FQDN-based egress needs a CNI that supports it (e.g. Cilium, Calico Enterprise); plain NetworkPolicy
+# only matches IP ranges.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: myelinate
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-from-ingress
+  namespace: myelinate
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: myelinate
+      app.kubernetes.io/component: gateway
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # Adjust to your ingress controller's namespace (ingress-nginx, traefik, kube-system for k3s Traefik...).
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+        # Uncomment to let Prometheus scrape /metrics:
+        # - namespaceSelector:
+        #     matchLabels: { kubernetes.io/metadata.name: monitoring }
+      ports:
+        - { protocol: TCP, port: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-dev-from-myelinate
+  namespace: myelinate
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres-dev
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: myelinate }
+      ports:
+        - { protocol: TCP, port: 5432 }

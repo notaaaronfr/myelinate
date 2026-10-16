@@ -130,6 +130,7 @@ export default definePluginEntry({
       };
       try {
         const out = await client.record(ep);
+        if (lastEpisode.size > MAX_TURNS_TRACKED) lastEpisode.delete(lastEpisode.keys().next().value!);
         lastEpisode.set(key, out.episode_id);
       } catch (err) {
         log.warn?.(`[myelinate] failed to record episode: ${err}`);
@@ -159,7 +160,7 @@ export default definePluginEntry({
         kind: Type.Optional(Type.Union([Type.Literal("fact"), Type.Literal("preference"), Type.Literal("lesson")])),
       }),
       async execute(_id: string, params: { content: string; kind?: "fact" | "preference" | "lesson" }) {
-        const userId = cfg.perUserMemory === false ? null : (toolCtx.requesterSenderId ?? null);
+        const userId = cfg.perUserMemory === false ? null : (userOf(toolCtx as AnyRecord) ?? null);
         await client.remember({ agent_id: agentId, user_id: userId }, params.content, params.kind ?? "fact");
         return { content: [{ type: "text" as const, text: "Saved." }], details: {} };
       },

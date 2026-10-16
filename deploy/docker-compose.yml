@@ -1,6 +1,8 @@
-# Local production-like stack: gateway (API + MCP) + dedicated learning worker + Postgres.
+# Production-like stack: gateway (API + MCP) + dedicated learning workers + Postgres.
+# Run from the repository root:  docker compose --env-file .env -f deploy/docker-compose.yml up -d
 services:
   postgres:
+    restart: unless-stopped
     image: postgres:17
     environment:
       POSTGRES_DB: myelinate
@@ -12,6 +14,7 @@ services:
       interval: 5s
 
   gateway:
+    restart: unless-stopped
     build: ..
     env_file: ../.env
     environment:
@@ -21,14 +24,15 @@ services:
     depends_on: { postgres: { condition: service_healthy } }
 
   worker:
+    restart: unless-stopped
     build: ..
     command: ["myelinate", "worker"]
     env_file: ../.env
     environment:
       MYELINATE_DATABASE_URL: postgresql+asyncpg://myelinate:${POSTGRES_PASSWORD}@postgres:5432/myelinate
       MYELINATE_WORKER_HEARTBEAT_FILE: /tmp/worker.alive
-    healthcheck:  # workers serve no HTTP; healthy while the job loop keeps touching its heartbeat file
-      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time() - os.path.getmtime('/tmp/worker.alive') > 60)"]
+    healthcheck:  # workers serve no HTTP; healthy while their heartbeat file is fresh (touched every 10 s)
+      test: ["CMD", "myelinate", "healthcheck"]
       interval: 15s
       start_period: 20s
     depends_on: { postgres: { condition: service_healthy } }

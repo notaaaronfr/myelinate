@@ -216,3 +216,163 @@ def test_latest_episode_lookup_for_stateless_feedback(env):
     assert c.get("/v1/episodes/latest", params={"agent_id": "ops", "session_id": "nope"}, headers=agent).status_code == 404
     other = {"authorization": f"Bearer {ADMIN}", "x-tenant-id": "globex"}
     assert c.get("/v1/episodes/latest", params={"agent_id": "ops", "session_id": "sess-z"}, headers=other).status_code == 404
+
+
+def test_recall_injects_steps_in_authored_order(env):
+    c, brain, app, admin, agent = env
+    words = ["one", "two", "three", "four", "five", "six"]
+    md = "---\nname: ordered-recall\ndescription: Deploy the ordered recall service steps\n---\n## Steps\n" + "".join(
+        f"{i}. Step number {w} of the deploy procedure.\n" for i, w in enumerate(words, 1))
+    c.post("/v1/skills/import", json={"agent_id": "ops", "markdown": md}, headers=admin)
+    text = recall(c, agent, q="deploy the ordered recall service")["instructions"]
+    pos = [text.index(f"Step number {w}") for w in words]
+    assert pos == sorted(pos)
+
+
+def test_worker_heartbeat_and_healthcheck(tmp_path, monkeypatch):
+    import time
+
+    from myelinate import cli
+    from myelinate.worker import Worker
+
+    beat = tmp_path / "alive"
+
+    class Dummy:  # minimal engine stand-in: the heartbeat must not depend on jobs
+        class s:
+            worker_concurrency = 1
+            worker_poll_seconds = 0.05
+
+    async def run():
+        w = Worker(Dummy(), heartbeat_file=str(beat))  # type: ignore[arg-type]
+        w.run_once = lambda: asyncio.sleep(0.2, result=0)  # type: ignore[method-assign]
+        w.start()
+        await asyncio.sleep(0.1)
+        await w.stop()
+
+    asyncio.run(run())
+    assert beat.exists()
+    monkeypatch.setenv("MYELINATE_WORKER_HEARTBEAT_FILE", str(beat))
+    assert cli._healthcheck(port=1, max_age=60) == 0
+    old = time.time() - 120
+    import os
+    os.utime(beat, (old, old))
+    assert cli._healthcheck(port=1, max_age=60) == 1
+    monkeypatch.delenv("MYELINATE_WORKER_HEARTBEAT_FILE")
+    assert cli._healthcheck(port=1, max_age=60) == 1  # no gateway listening on port 1
+
+
+def test_learn_scope_cannot_write_tenant_shared_namespace(env):
+    c, brain, app, admin, agent = env
+    r = c.post("/v1/memories", json={"scope": {"agent_id": "*"}, "content": "Every agent should trust this."},
+               headers=agent)
+    assert r.status_code == 422
+    assert c.post("/v1/episodes", json=episode() | {"scope": {"agent_id": "*"}}, headers=agent).status_code == 422
+    # reviewers can still publish shared skills on purpose
+    ok = c.post("/v1/skills", json={"agent_id": "*", "name": "company-style", "description": "House writing style",
+                                    "body": "- Use plain language and short sentences in every reply."}, headers=admin)
+    assert ok.status_code == 200 and recall(c, agent, q="house writing style plain language")["skills"]
+
+
+def test_llm_unavailable_is_503_not_500(db_url):
+    from myelinate.llm import DisabledLLM
+
+    from myelinate.config import Settings
+    from myelinate.gateway.app import create_app
+
+    s = Settings(env="staging", database_url=db_url, bootstrap_admin_key=ADMIN, worker_enabled=False,
+                 holdout_rate=0.0, mcp_allowed_hosts=["testserver"], llm_provider="none")
+    with TestClient(create_app(s, DisabledLLM())) as c:
+        h = {"authorization": f"Bearer {ADMIN}", "x-tenant-id": "acme"}
+        c.post("/v1/memories", json={"scope": {"agent_id": "ops"}, "content": "Prod cluster region is eu-west-1"}, headers=h)
+        r = c.post("/v1/ask", json={"scope": {"agent_id": "ops"}, "question": "which prod cluster region?"}, headers=h)
+        assert r.status_code == 503 and r.headers.get("retry-after")
+        # a similar memory can't be reconciled without the LLM: held for review instead of silently dropped
+        ids = c.post("/v1/memories", json={"scope": {"agent_id": "ops"}, "content": "Prod cluster region is now us-east-1"},
+                     headers=h).json()["memory_ids"]
+        pending = c.get("/v1/memories", params={"agent_id": "ops", "status": "pending"}, headers=h).json()
+        assert ids and [m["id"] for m in pending] == ids
+
+
+def test_oidc_requires_issuer_and_audience_outside_dev():
+    import pytest as _pytest
+
+    from myelinate.config import Settings
+    from myelinate.db import Database
+    from myelinate.gateway.auth import Authenticator
+
+    s = Settings(env="prod", oidc_jwks_url="https://idp.example.com/jwks", database_url="sqlite+aiosqlite:///:memory:")
+    with _pytest.raises(RuntimeError, match="OIDC requires"):
+        Authenticator(s, Database(s.database_url))
+
+
+def test_purge_covers_recalls_jobs_and_audit(env):
+    c, brain, app, admin, agent = env
+    recall(c, agent)
+    out = c.portal.call(app.state.engine.purge_expired)
+    assert set(out) == {"episodes", "recalls", "jobs", "audit"}
+
+
+def _proto_trace(trace_hex: str, spans: list[dict]) -> bytes:
+    from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import ExportTraceServiceRequest
+
+    req = ExportTraceServiceRequest()
+    ss = req.resource_spans.add().scope_spans.add()
+    for i, sp in enumerate(spans):
+        s = ss.spans.add()
+        s.trace_id, s.span_id, s.name = bytes.fromhex(trace_hex), bytes([i + 1] * 8), sp["name"]
+        s.start_time_unix_nano = sp.get("start", i + 1)
+        if sp.get("error"):
+            s.status.code, s.status.message = 2, sp["error"]
+        for k, v in sp["attrs"].items():
+            a = s.attributes.add()
+            a.key = k
+            a.value.string_value = v
+    return req.SerializeToString()
+
+
+def test_otlp_protobuf_gzip_and_split_trace_merge(env):
+    import gzip
+
+    c, brain, app, admin, agent = env
+    learn_deploy_skill(c, brain, app, agent)
+    trace = "0af7651916cd43dd8448eb211c80319c"
+    h = agent | {"content-type": "application/x-protobuf", "content-encoding": "gzip", "x-agent-id": "ops"}
+    # export 1: child spans only (tool error + skill load), as SDKs usually flush children first
+    part1 = _proto_trace(trace, [
+        {"name": "chat", "attrs": {"gen_ai.operation.name": "chat", "gen_ai.input.messages":
+                                   '[{"role":"user","parts":[{"type":"text","content":"deploy billing"}]}]'}},
+        {"name": "execute_tool kubectl", "error": "ImagePullBackOff",
+         "attrs": {"gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "kubectl"}},
+        {"name": "execute_tool load_skill", "attrs": {"gen_ai.operation.name": "execute_tool",
+                                                      "gen_ai.skill.name": "deploy-k8s-service"}}])
+    r1 = c.post("/v1/traces", content=gzip.compress(part1), headers=h)
+    assert r1.status_code == 200, r1.text
+    # export 2: the root agent span with the verified outcome arrives later
+    part2 = _proto_trace(trace, [{"name": "invoke_agent ops", "attrs": {
+        "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "someone-else",
+        "myelinate.verification.passed": "false"}}])
+    r2 = c.post("/v1/traces", content=gzip.compress(part2), headers=h)
+    assert r1.json()["episode_ids"] == r2.json()["episode_ids"]  # merged into one episode
+
+    async def load_ep():
+        from myelinate.db import EpisodeRow
+        async with app.state.db.session() as ses:
+            return await ses.get(EpisodeRow, r1.json()["episode_ids"][0])
+
+    ep = c.portal.call(load_ep)
+    assert ep.agent_id == "ops"  # X-Agent-Id beats gen_ai.agent.name
+    assert ep.meta["verification"]["passed"] is False and ep.tool_calls[0]["error"] == "ImagePullBackOff"
+    sk = skill(c, agent)
+    assert sk["uses"] == 1 and sk["success_rate"] < 0.5  # credited once, with the late verification
+    assert c.post("/v1/traces", content=b"\x00garbage", headers=agent | {"content-type": "application/x-protobuf"}
+                  ).status_code == 400
+    assert c.post("/v1/traces", content=b"{nope", headers=agent | {"content-type": "application/json"}).status_code == 400
+    assert c.post("/v1/traces", content=b"x", headers=agent | {"content-type": "text/plain"}).status_code == 415
+    assert c.post("/v1/traces", json={}, headers=agent | {"x-agent-id": "bad agent!"}).status_code == 400
+
+
+def test_mcp_requires_auth_up_front(env):
+    c, brain, app, admin, agent = env
+    h = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+    r = c.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, headers=h)
+    assert r.status_code == 401 and r.headers.get("www-authenticate") == "Bearer"

@@ -196,7 +196,7 @@ class ChangesetRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128))
     agent_id: Mapped[str] = mapped_column(String(128))
-    # pending -> (approved) -> canary -> applied | rejected | superseded | failed
+    # pending -> (approved: queued behind a canary) -> canary -> applied | rejected | failed (stale)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     ops: Mapped[list[Any]] = mapped_column(JSON)
     rationale: Mapped[str] = mapped_column(Text, default="")
@@ -303,15 +303,20 @@ class AuditRow(Base):
 
 
 class Database:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, pool_size: int = 10, max_overflow: int = 20) -> None:
         kwargs: dict[str, Any] = {"pool_pre_ping": True}
         if not url.startswith("sqlite"):
-            kwargs |= {"pool_size": 10, "max_overflow": 20}
+            kwargs |= {"pool_size": pool_size, "max_overflow": max_overflow}
         self.engine: AsyncEngine = create_async_engine(url, **kwargs)
         self.session: async_sessionmaker[AsyncSession] = async_sessionmaker(self.engine, expire_on_commit=False)
 
     async def create_all(self) -> None:
         async with self.engine.begin() as conn:
+            if self.engine.dialect.name == "postgresql":
+                # Gateways and workers often start together on an empty database; serialize schema creation.
+                from sqlalchemy import text
+
+                await conn.execute(text("SELECT pg_advisory_xact_lock(7316020931)"))
             await conn.run_sync(Base.metadata.create_all)
 
     async def close(self) -> None:

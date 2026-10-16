@@ -16,5 +16,6 @@ ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 MYELINATE_ENV=prod \
 VOLUME ["/data"]
 USER 10001
 EXPOSE 8080
-HEALTHCHECK --interval=15s --timeout=3s CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8080/healthz')" || exit 1
+# Gateways answer /healthz; `myelinate worker` containers (MYELINATE_WORKER_HEARTBEAT_FILE set) use their heartbeat.
+HEALTHCHECK --interval=15s --timeout=5s CMD ["myelinate", "healthcheck"]
 CMD ["myelinate", "serve", "--host", "0.0.0.0", "--port", "8080"]

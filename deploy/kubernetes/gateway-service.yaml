@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: myelinate-gateway
+  namespace: myelinate
+  labels:
+    app.kubernetes.io/name: myelinate
+    app.kubernetes.io/component: gateway
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: myelinate
+    app.kubernetes.io/component: gateway
+  ports:
+    - { name: http, port: 80, targetPort: http }

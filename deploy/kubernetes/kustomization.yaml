@@ -1,0 +1,29 @@
+# Base manifests for Myelinate. Apply with:  kubectl apply -k deploy/kubernetes
+# Create the myelinate-secrets Secret first (see secret.example.yaml); it is deliberately not listed here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: myelinate
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: myelinate
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - gateway-deployment.yaml
+  - gateway-service.yaml
+  - worker-deployment.yaml
+  - hpa.yaml
+  # Optional, enable after review:
+  # - networkpolicy.yaml
+  # - ingress.example.yaml
+  # Trying it out only (NOT production): in-cluster Postgres.
+  # - postgres-dev.yaml
+
+images:
+  # Pin a released tag (or digest) instead of latest. Until images are published to GHCR,
+  # build and push your own and point newName/newTag at it.
+  - name: ghcr.io/notaaaronfr/myelinate
+    newTag: latest

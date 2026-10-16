@@ -1,0 +1,23 @@
+// Myelinate plugin entry for OpenClaw. Merge into ~/.openclaw/openclaw.json, or apply with:
+//   openclaw config patch --file examples/openclaw-config.json5 --dry-run   # review
+//   openclaw config patch --file examples/openclaw-config.json5
+// Install the plugin first: see docs/integrations/openclaw.md.
+{
+  plugins: {
+    entries: {
+      myelinate: {
+        enabled: true,
+        // Required: before_prompt_build and agent_end are conversation hooks, which non-bundled
+        // plugins may only use with this grant. It belongs under `hooks`, not under `config`.
+        hooks: { allowConversationAccess: true },
+        config: {
+          gatewayUrl: "http://localhost:8080", // Myelinate base URL (required)
+          // apiKey: "myl_...",               // prefer the MYELINATE_API_KEY env var instead
+          agentId: "openclaw",                 // knowledge namespace; agents sharing an id share skills
+          perUserMemory: true,                 // scope memories/preferences to the message sender
+          timeoutMs: 4000,                     // per gateway request; learning fails open on timeout
+        },
+      },
+    },
+  },
+}

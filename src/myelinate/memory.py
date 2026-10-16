@@ -16,7 +16,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import prompts, safety
-from .core import Core, clip
+from .core import BudgetExceeded, Core, clip
 from .db import MemoryRow, ProfileRow, new_id, utcnow
 from .llm import LLMError
 from .retrieval import Candidate, similarity
@@ -87,10 +87,12 @@ class MemoryService:
                 out = await self.c.llm_json(tenant, "memory", prompts.MEMORY_SYSTEM,
                                             json.dumps(payload, indent=1), prompts.MEMORY_SCHEMA)
                 decisions = out.get("decisions", [])
-            except LLMError as e:
-                log.warning("memory.reconcile_failed", error=str(e))
-                decisions = [{"candidate": i, "action": "add", "target_id": "", "content": c["content"]}
-                             for i, c in enumerate(cands) if not neighbours[i]]
+            except (LLMError, BudgetExceeded) as e:
+                # Never lose a memory: novel ones are added; ones that may duplicate or contradict an existing
+                # memory are held for review (approve with POST /v1/memories/{id}/approve).
+                log.warning("memory.reconcile_unavailable", error=str(e))
+                decisions = [{"candidate": i, "action": "add", "target_id": "", "content": c["content"],
+                              "hold": bool(neighbours[i])} for i, c in enumerate(cands)]
 
         by_id = {m.id: m for nb in neighbours for m in nb}
         created: list[str] = []
@@ -103,7 +105,8 @@ class MemoryService:
                 c = cands[i]
                 content = clip((d.get("content") or c["content"]).strip(), 1000)
                 findings = safety.scan(content, 2000)
-                status = "active" if self.c.s.auto_approve_memories and not findings else "pending"
+                status = ("active" if self.c.s.auto_approve_memories and not findings and not d.get("hold")
+                          else "pending")
                 row = MemoryRow(id=new_id("mem"), tenant_id=tenant, agent_id=agent_id, user_id=c["user_id"],
                                 kind=c["kind"], status=status, content=content, content_hash=content_hash(content),
                                 sources=sources[:20])

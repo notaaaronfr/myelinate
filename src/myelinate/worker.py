@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import pathlib
 from datetime import timedelta
 
@@ -26,31 +25,44 @@ log = structlog.get_logger()
 LEASE = timedelta(minutes=10)
 
 
+HEARTBEAT_SECONDS = 10.0
+
+
 class Worker:
-    def __init__(self, engine: LearningEngine) -> None:
+    def __init__(self, engine: LearningEngine, heartbeat_file: str | None = None) -> None:
         self.engine = engine
         self.id = new_id("wrk")
+        self.heartbeat_file = heartbeat_file  # touched every few seconds, independent of job duration
         self._task: asyncio.Task[None] | None = None
+        self._beat_task: asyncio.Task[None] | None = None
         self._sem = asyncio.Semaphore(engine.s.worker_concurrency)
         self._inflight: set[asyncio.Task[None]] = set()
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._loop(), name="myelinate-worker")
+        if self.heartbeat_file:
+            self._beat_task = asyncio.create_task(self._beat(), name="myelinate-worker-heartbeat")
 
     async def stop(self) -> None:
-        if self._task:
-            self._task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._task
+        """Stop claiming new jobs and let in-flight jobs finish (up to 30s) so they aren't left to lease expiry."""
+        for t in (self._task, self._beat_task):
+            if t:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await t
         if self._inflight:
             await asyncio.wait(self._inflight, timeout=30)
 
-    async def _loop(self) -> None:
-        beat_file = os.environ.get("MYELINATE_WORKER_HEARTBEAT_FILE")  # liveness for container healthchecks
+    async def _beat(self) -> None:
+        """Liveness for container probes: proves the event loop is alive even during long jobs."""
+        path = pathlib.Path(self.heartbeat_file or "")
         while True:
-            if beat_file:
-                with contextlib.suppress(OSError):
-                    await asyncio.to_thread(pathlib.Path(beat_file).touch)
+            with contextlib.suppress(OSError):
+                await asyncio.to_thread(path.touch)
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+
+    async def _loop(self) -> None:
+        while True:
             try:
                 n = await self.run_once()
             except Exception:

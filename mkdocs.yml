@@ -1,0 +1,82 @@
+site_name: Myelinate
+site_description: Self-improving skills and memory for any AI agent framework, with governance built in.
+site_url: https://notaaaronfr.github.io/myelinate/
+repo_url: https://github.com/notaaaronfr/myelinate
+repo_name: notaaaronfr/myelinate
+edit_uri: edit/main/docs/
+copyright: MIT licensed
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle: { icon: material/brightness-7, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle: { icon: material/brightness-4, name: Switch to light mode }
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc: { permalink: true }
+  - pymdownx.details
+  - pymdownx.highlight: { anchor_linenums: true }
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - { name: mermaid, class: mermaid, format: !!python/name:pymdownx.superfences.fence_code_format }
+  - pymdownx.tabbed: { alternate_style: true }
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Quickstart: getting-started/quickstart.md
+      - Concepts: getting-started/concepts.md
+  - Integrations:
+      - Overview: integrations/overview.md
+      - Microsoft Agent Framework: integrations/microsoft-agent-framework.md
+      - OpenClaw: integrations/openclaw.md
+      - MCP clients: integrations/mcp.md
+      - OpenTelemetry (zero code): integrations/opentelemetry.md
+      - LangGraph, CrewAI and others: integrations/other-frameworks.md
+      - TypeScript: integrations/typescript.md
+  - Deployment:
+      - Docker: deployment/docker.md
+      - Kubernetes: deployment/kubernetes.md
+      - Production checklist: deployment/production-checklist.md
+  - Operations:
+      - Security and SSO: operations/security.md
+      - Governance: operations/governance.md
+      - Observability: operations/observability.md
+      - Data and privacy: operations/data-and-privacy.md
+      - Scaling and HA: operations/scaling-and-ha.md
+      - Backup and upgrades: operations/backup-and-upgrades.md
+      - Cost control: operations/cost-control.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - REST API: reference/api.md
+      - CLI: reference/cli.md
+      - Python SDK: reference/python-sdk.md
+      - Architecture: reference/architecture.md
+  - Troubleshooting: troubleshooting.md
+  - FAQ: faq.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md

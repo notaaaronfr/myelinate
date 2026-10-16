@@ -202,10 +202,12 @@ def ordered(bullets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(bullets, key=lambda b: (rank.get(b["section"], 99), b.get("position", 0), b["id"]))
 
 
-def render_bullets(bullets: list[dict[str, Any]], with_ids: bool, limit: int | None = None) -> str:
+def render_bullets(bullets: list[dict[str, Any]], with_ids: bool, limit: int | None = None,
+                   presorted: bool = False) -> str:
+    """presorted=True keeps the given order (callers that already applied `ordered` and dropped positions)."""
     lines: list[str] = []
     current = None
-    for b in ordered(bullets)[:limit]:
+    for b in (bullets if presorted else ordered(bullets))[:limit]:
         if b["section"] != current:
             current = b["section"]
             lines.append(f"#### {SECTION_TITLES.get(current, current.title())}")

@@ -1,0 +1,22 @@
+# Requires metrics-server. The gateway is stateless; scale it on CPU.
+# Note: rate limits are in-memory per replica, so effective limits grow with replica count.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: myelinate-gateway
+  namespace: myelinate
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: myelinate-gateway
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300

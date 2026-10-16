@@ -1,6 +1,7 @@
 """Myelinate gateway: REST + MCP + OTLP ingestion over one learning engine."""
 
 import contextlib
+import re
 import time
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -16,8 +17,9 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, text, update
 
+from .. import __version__
 from ..config import Settings, get_settings
-from ..core import Conflict, NotFound
+from ..core import BudgetExceeded, Conflict, NotFound
 from ..db import (
     ApiKey,
     AuditRow,
@@ -34,9 +36,10 @@ from ..db import (
 )
 from ..embeddings import Embedder, HttpEmbedder
 from ..engine import LearningEngine
-from ..llm import LLM, AnthropicLLM, DisabledLLM
+from ..llm import LLM, AnthropicLLM, DisabledLLM, LLMError
 from ..memory import valid_at
 from ..models import (
+    AGENT_ID,
     AskIn,
     AskOut,
     Bullet,
@@ -53,7 +56,7 @@ from ..models import (
     SkillImport,
     SkillIn,
 )
-from ..otel import spans_to_episodes
+from ..otel import decode_otlp, spans_to_episodes
 from ..telemetry import configure_logging, configure_tracing, metrics
 from ..worker import Worker
 from .auth import ALL_SCOPES, Authenticator, AuthError, Principal, RateLimiter, generate_key, hash_key
@@ -133,7 +136,7 @@ def skill_out(sk: SkillRow, bullets: list[Any]) -> Skill:
 def create_app(settings: Settings | None = None, llm: LLM | None = None, embedder: Embedder | None = None) -> FastAPI:
     s = settings or get_settings()
     configure_logging(json_logs=s.env != "dev")
-    db = Database(s.database_url)
+    db = Database(s.database_url, s.db_pool_size, s.db_max_overflow)
     engine = LearningEngine(db, s, llm or build_llm(s), embedder or build_embedder(s))
     authn = Authenticator(s, db)
     limiter = RateLimiter(s.rate_limit_per_minute)
@@ -156,7 +159,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
         await worker.stop()
         await db.close()
 
-    app = FastAPI(title="Myelinate", version="0.2.0", lifespan=lifespan,
+    app = FastAPI(title="Myelinate", version=__version__, lifespan=lifespan,
                   description="Plug-in self-improvement for any agent framework: skills, memory, reflection, "
                               "evolution, canary rollout and governance.")
     app.state.engine, app.state.worker, app.state.db = engine, worker, db
@@ -172,7 +175,13 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
         try:
             ip_limiter.check(f"ip:{request.client.host if request.client else 'unknown'}")  # before auth
         except AuthError as e:
-            return JSONResponse({"detail": e.detail}, status_code=e.status)
+            return JSONResponse({"detail": e.detail}, status_code=e.status, headers={"Retry-After": "60"})
+        if request.url.path.startswith("/mcp"):  # MCP requires credentials up front, not just per tool call
+            try:
+                limiter.check((await authn.authenticate(request.headers)).subject)
+            except AuthError as e:
+                headers = {"WWW-Authenticate": "Bearer"} if e.status == 401 else None
+                return JSONResponse({"detail": e.detail}, status_code=e.status, headers=headers)
         t0 = time.perf_counter()
         try:
             resp: Response = await call_next(request)
@@ -188,7 +197,17 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.exception_handler(AuthError)
     async def _auth(_: Request, e: AuthError) -> JSONResponse:
-        return JSONResponse({"detail": e.detail}, status_code=e.status)
+        headers = {"Retry-After": "60"} if e.status == 429 else None
+        return JSONResponse({"detail": e.detail}, status_code=e.status, headers=headers)
+
+    @app.exception_handler(LLMError)
+    async def _llm(_: Request, e: LLMError) -> JSONResponse:
+        return JSONResponse({"detail": f"learning model unavailable: {e}"}, status_code=503,
+                            headers={"Retry-After": "30"})
+
+    @app.exception_handler(BudgetExceeded)
+    async def _budget(_: Request, e: BudgetExceeded) -> JSONResponse:
+        return JSONResponse({"detail": str(e)}, status_code=429, headers={"Retry-After": "3600"})
 
     def need(scope: str):  # type: ignore[no-untyped-def]
         async def dep(request: Request) -> Principal:
@@ -234,10 +253,12 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/recall", response_model=RecallResponse, tags=["loop"])
     async def recall(req: RecallRequest, p: Learn) -> RecallResponse:
+        """Retrieve learned skills, memories and the user's profile for a task, as ready-to-inject instructions."""
         return await engine.recall(p.tenant_id, req)
 
     @app.post("/v1/episodes", response_model=EpisodeOut, tags=["loop"])
     async def record(ep: EpisodeIn, p: Learn) -> EpisodeOut:
+        """Record a finished run (messages, tool calls, outcome, verification) so the agent can learn from it."""
         return await engine.record(p.tenant_id, ep)
 
     @app.post("/v1/episodes:batch", tags=["loop"])
@@ -263,16 +284,27 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/feedback", status_code=204, tags=["loop"])
     async def feedback(fb: FeedbackIn, p: Learn) -> None:
+        """Rate a recorded episode (0-1), optionally with a comment or the correct answer."""
         await engine.feedback(p.tenant_id, p.subject, fb)
 
     async def _otlp(request: Request, p: Principal) -> dict[str, Any]:
-        if "json" not in (request.headers.get("content-type") or ""):
-            raise HTTPException(415, "send OTLP/HTTP with JSON encoding (OTEL_EXPORTER_OTLP_PROTOCOL=http/json)")
-        agent = request.headers.get("x-agent-id") or "default"
+        override = request.headers.get("x-agent-id")
+        if override and not re.match(AGENT_ID, override):
+            raise HTTPException(400, f"invalid X-Agent-Id (must match {AGENT_ID})")
+        try:
+            payload = decode_otlp(await request.body(), request.headers.get("content-type") or "",
+                                  request.headers.get("content-encoding") or "", s.max_request_bytes)
+        except LookupError as e:
+            raise HTTPException(415, str(e)) from e
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
         out = []
-        for ep, recall_id in spans_to_episodes(await request.json(), default_agent=agent):
+        for ep, recall_id in spans_to_episodes(payload, agent_override=override):
             ep.recall_id = recall_id
-            out.append((await engine.record(p.tenant_id, ep)).episode_id)
+            existing = await engine._by_key(p.tenant_id, ep.idempotency_key) if ep.idempotency_key else None
+            # A trace's spans often arrive in several exports (children before the root): merge, don't drop.
+            out.append(await engine.merge_episode(p.tenant_id, existing, ep) if existing
+                       else (await engine.record(p.tenant_id, ep)).episode_id)
         return {"partialSuccess": {}, "episode_ids": out}
 
     @app.post("/v1/traces", tags=["loop"])
@@ -286,12 +318,14 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/ask", response_model=AskOut, tags=["loop"])
     async def ask(req: AskIn, p: Learn) -> AskOut:
+        """Answer a question from learned evidence only (skills, memories, profile), with cited evidence ids."""
         return await engine.ask(p.tenant_id, req)
 
     # ---------------------------------------------------------------- skills
 
     @app.get("/v1/skills", response_model=list[Skill], tags=["skills"])
     async def list_skills(p: Learn, agent_id: str = "default", status: str | None = None) -> list[Skill]:
+        """List an agent's skills (plus tenant-shared ones) with their rules and success rates."""
         async with db.session() as ses:
             q = select(SkillRow).where(SkillRow.tenant_id == p.tenant_id, SkillRow.agent_id.in_([agent_id, "*"]))
             if status:
@@ -301,15 +335,18 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.get("/v1/skills/{ref}", response_model=Skill, tags=["skills"])
     async def get_skill(ref: str, p: Learn, agent_id: str = "default") -> Skill:
+        """Get one skill by id or name."""
         sk, bl = await engine.get_skill(p.tenant_id, agent_id, ref)
         return skill_out(sk, bl)
 
     @app.get("/v1/skills/{ref}/SKILL.md", response_class=PlainTextResponse, tags=["skills"])
     async def skill_md(ref: str, p: Learn, agent_id: str = "default") -> str:
+        """Export a skill as an agentskills.io-compatible SKILL.md."""
         return await engine.skill_markdown(p.tenant_id, agent_id, ref)
 
     @app.get("/v1/skills/{ref}/versions", tags=["skills"])
     async def skill_versions(ref: str, p: Learn, agent_id: str = "default") -> list[dict[str, Any]]:
+        """List a skill's immutable version history."""
         sk, _ = await engine.get_skill(p.tenant_id, agent_id, ref)
         async with db.session() as ses:
             rows = (await ses.scalars(select(SkillVersionRow).where(SkillVersionRow.skill_id == sk.id)
@@ -319,6 +356,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/skills", tags=["skills"])
     async def author_skill(body: SkillIn, p: Review) -> dict[str, Any]:
+        """Create or replace a skill by hand (applied through a governed changeset)."""
         cs = await engine.author_skill(p.tenant_id, p.subject, body)
         return {"changeset_id": cs.id if cs else None, "status": cs.status if cs else "unchanged"}
 
@@ -330,10 +368,12 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/skills/{skill_id}/rollback", tags=["skills"])
     async def rollback(skill_id: str, body: RollbackIn, p: Review) -> dict[str, int]:
+        """Restore a skill to an earlier version (recorded as a new version)."""
         return {"version": await engine.gov.rollback(p.tenant_id, p.subject, skill_id, body.version)}
 
     @app.post("/v1/skills/{skill_id}/pin", tags=["skills"])
     async def pin(skill_id: str, body: PinIn, p: Review) -> dict[str, bool]:
+        """Pin or unpin a skill. Pinned skills are never archived by the lifecycle."""
         async with db.session() as ses:
             res = await ses.execute(update(SkillRow).where(SkillRow.id == skill_id, SkillRow.tenant_id == p.tenant_id)
                                     .values(pinned=body.pinned))
@@ -345,6 +385,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/skills/{skill_id}/evolve", status_code=202, tags=["skills"])
     async def trigger_evolution(skill_id: str, p: Review) -> dict[str, str]:
+        """Queue an evolution run for a skill."""
         async with db.session() as ses:
             sk = await ses.get(SkillRow, skill_id)
             if sk is None or sk.tenant_id != p.tenant_id:
@@ -356,12 +397,14 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/memories", tags=["memory"])
     async def add_memory(m: MemoryIn, p: Learn) -> dict[str, list[str]]:
+        """Add a memory. It is reconciled against existing memories (add, update, supersede or no-op)."""
         return {"memory_ids": await engine.add_memory(p.tenant_id, p.subject, m)}
 
     @app.get("/v1/memories", response_model=list[Memory], tags=["memory"])
     async def list_memories(p: Learn, agent_id: str = "default", user_id: str | None = None,
                             as_of: datetime | None = None, include_history: bool = False, status: str = "active",
                             limit: Annotated[int, Query(le=1000)] = 200) -> list[Memory]:
+        """List memories, optionally for a user, at a point in time (`as_of`) or with superseded history."""
         async with db.session() as ses:
             q = select(MemoryRow).where(MemoryRow.tenant_id == p.tenant_id, MemoryRow.agent_id == agent_id,
                                         MemoryRow.status == status)
@@ -374,6 +417,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/memories/{memory_id}/approve", tags=["memory"])
     async def approve_memory(memory_id: str, p: Review) -> dict[str, str]:
+        """Approve a memory held for review (e.g. flagged by the safety scan)."""
         async with db.session() as ses:
             m = await ses.get(MemoryRow, memory_id)
             if m is None or m.tenant_id != p.tenant_id:
@@ -396,6 +440,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.get("/v1/profiles/{agent_id}/{user_id}", tags=["memory"])
     async def get_profile(agent_id: str, user_id: str, p: Learn) -> dict[str, Any]:
+        """Get the profile card for a user of an agent."""
         async with db.session() as ses:
             row = await ses.get(ProfileRow, (p.tenant_id, agent_id, user_id))
         if row is None:
@@ -407,6 +452,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
     @app.get("/v1/changesets", response_model=list[Changeset], tags=["governance"])
     async def list_changesets(p: Review, status: str | None = "pending", agent_id: str | None = None,
                               limit: Annotated[int, Query(le=500)] = 100) -> list[Changeset]:
+        """List changesets (proposed skill changes), by default those pending review."""
         async with db.session() as ses:
             q = select(ChangesetRow).where(ChangesetRow.tenant_id == p.tenant_id)
             if status:
@@ -418,16 +464,19 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/changesets/{cs_id}/review", tags=["governance"])
     async def review(cs_id: str, body: ReviewIn, p: Review) -> dict[str, str]:
+        """Approve or reject a pending changeset. Risky changes to proven skills start a canary unless skipped."""
         return {"status": await engine.gov.review(p.tenant_id, p.subject, cs_id, body.approve, body.comment,
                                                   body.skip_canary)}
 
     @app.post("/v1/agents/{agent_id}/reflect", status_code=202, tags=["governance"])
     async def trigger_reflection(agent_id: str, p: Review) -> dict[str, str]:
+        """Queue reflection over an agent's unreflected episodes now."""
         await enqueue(p, "reflect", {"agent_id": agent_id}, f"reflect:{p.tenant_id}:{agent_id}")
         return {"status": "scheduled"}
 
     @app.post("/v1/agents/{agent_id}/curate", status_code=202, tags=["governance"])
     async def trigger_curation(agent_id: str, p: Review) -> dict[str, str]:
+        """Queue library upkeep for an agent now (dedup, lifecycle, nomination, profiles)."""
         await enqueue(p, "curate", {"agent_id": agent_id}, f"curate:{p.tenant_id}:{agent_id}")
         return {"status": "scheduled"}
 
@@ -446,10 +495,12 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.get("/v1/agents/{agent_id}/insights", tags=["governance"])
     async def insights(agent_id: str, p: Learn) -> dict[str, Any]:
+        """Learning lift vs the holdout group, per-skill success rates, canaries, problem rules and learning cost."""
         return await engine.insights(p.tenant_id, agent_id)
 
     @app.get("/v1/agents/{agent_id}/export", tags=["governance"])
     async def export(agent_id: str, p: Review, limit: Annotated[int, Query(le=100000)] = 10000) -> StreamingResponse:
+        """Export episodes with rewards as JSON Lines (for analytics, RL or fine-tuning)."""
         await audit(p, "episodes.exported", agent_id, limit=limit)
         return StreamingResponse(engine.export(p.tenant_id, agent_id, limit), media_type="application/x-ndjson")
 
@@ -457,6 +508,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.post("/v1/admin/api-keys", tags=["admin"])
     async def create_key(body: KeyIn, p: Admin) -> dict[str, Any]:
+        """Create a tenant API key with the given scopes. The key is only shown once."""
         bad = set(body.scopes) - ALL_SCOPES
         if bad:
             raise HTTPException(400, f"unknown scopes {sorted(bad)}")
@@ -470,6 +522,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.delete("/v1/admin/api-keys/{key_id}", status_code=204, tags=["admin"])
     async def revoke_key(key_id: str, p: Admin) -> None:
+        """Revoke a tenant API key."""
         async with db.session() as ses:
             row = await ses.get(ApiKey, key_id)
             if row is None or row.tenant_id != p.tenant_id:
@@ -480,6 +533,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.get("/v1/admin/audit", tags=["admin"])
     async def audit_log(p: Admin, limit: Annotated[int, Query(le=1000)] = 200) -> list[dict[str, Any]]:
+        """List the tenant's audit log, newest first."""
         async with db.session() as ses:
             rows = (await ses.scalars(select(AuditRow).where(AuditRow.tenant_id == p.tenant_id)
                                       .order_by(AuditRow.created_at.desc()).limit(limit))).all()
@@ -488,6 +542,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
 
     @app.get("/v1/admin/usage", tags=["admin"])
     async def usage(p: Admin) -> list[dict[str, Any]]:
+        """Learning-side LLM usage per day and purpose (for budgets and chargeback)."""
         async with db.session() as ses:
             rows = (await ses.scalars(select(UsageRow).where(UsageRow.tenant_id == p.tenant_id)
                                       .order_by(UsageRow.day.desc()).limit(500))).all()
