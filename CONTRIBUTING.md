@@ -50,3 +50,16 @@ CI runs all of these, plus a Docker build and smoke test.
 ## Reporting security issues
 
 Please don't open public issues for vulnerabilities. See [SECURITY.md](https://github.com/notaaaronfr/myelinate/blob/main/SECURITY.md).
+
+## Releasing (maintainers)
+
+1. Bump the version in `pyproject.toml`, `src/myelinate/__init__.py` and `adapters/openclaw/package.json`. Move the
+   `Unreleased` changelog entries under the new version.
+2. Merge to `main`, then tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
+3. The `Release` workflow checks that the versions match, then:
+   - publishes the multi-arch image `ghcr.io/notaaaronfr/myelinate` with signed build provenance;
+   - publishes to PyPI and npm through trusted publishing (when the `PUBLISH_PYPI` / `PUBLISH_NPM` repository
+     variables are `true`);
+   - creates the GitHub release from the changelog.
+
+To re-run a release (for example after enabling a registry): **Actions → Release → Run workflow**, then enter the tag.

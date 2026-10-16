@@ -1,6 +1,6 @@
 {
   "name": "@myelinate/openclaw-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Self-learning (skills, memory, reflection, evolution) for OpenClaw agents via the Myelinate gateway",
   "type": "module",
   "main": "./index.ts",
@@ -12,7 +12,8 @@
   "files": [
     "index.ts",
     "client.ts",
-    "openclaw.plugin.json"
+    "openclaw.plugin.json",
+    "README.md"
   ],
   "peerDependencies": {
     "openclaw": ">=2026.10.0"
@@ -45,5 +46,8 @@
     "self-improving",
     "memory",
     "skills"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

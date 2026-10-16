@@ -74,6 +74,6 @@ jobs:
       - name: Smoke test
         run: |
           docker run -d --name myl -e MYELINATE_ENV=dev -e MYELINATE_LLM_PROVIDER=none -p 8080:8080 myelinate:ci
-          for i in $(seq 1 30); do curl -sf localhost:8080/readyz && break; sleep 1; done
+          for _ in $(seq 1 30); do curl -sf localhost:8080/readyz && break; sleep 1; done
           curl -sf localhost:8080/readyz
           docker run --rm myelinate:ci 2>&1 | grep -q "requires MYELINATE_BOOTSTRAP_ADMIN_KEY"  # secure by default

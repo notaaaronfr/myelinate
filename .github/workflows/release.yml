@@ -1,0 +1,153 @@
+name: Release
+
+# Publishes a tagged version (vX.Y.Z) to:
+#   - GitHub Container Registry  ghcr.io/notaaaronfr/myelinate   (always; uses GITHUB_TOKEN)
+#   - PyPI                        myelinate                      (when repo variable PUBLISH_PYPI == 'true')
+#   - npm                         @myelinate/openclaw-plugin     (when repo variable PUBLISH_NPM == 'true')
+# and creates a GitHub release from the matching CHANGELOG section.
+# PyPI and npm use trusted publishing (OIDC): no long-lived tokens are stored. See docs/contributing.md.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)publish, e.g. v0.2.0
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.TAG }}" }
+      - id: v
+        name: Tag matches package versions
+        run: |
+          version="${TAG#v}"
+          py=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          init=$(grep -m1 '__version__' src/myelinate/__init__.py | cut -d'"' -f2)
+          npmv=$(node -p "require('./adapters/openclaw/package.json').version")
+          echo "tag=$version pyproject=$py __init__=$init npm=$npmv"
+          test "$version" = "$py" && test "$version" = "$init" && test "$version" = "$npmv"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  container:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.TAG }}" }
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=Myelinate
+            org.opencontainers.image.description=Self-improving skills and memory for any AI agent framework
+            org.opencontainers.image.licenses=MIT
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  pypi:
+    needs: verify
+    if: vars.PUBLISH_PYPI == 'true'
+    runs-on: ubuntu-latest
+    environment: { name: pypi, url: "https://pypi.org/project/myelinate/" }
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.TAG }}" }
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  npm:
+    needs: verify
+    if: vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-latest
+    environment: { name: npm, url: "https://www.npmjs.com/package/@myelinate/openclaw-plugin" }
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: adapters/openclaw
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.TAG }}" }
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest   # trusted publishing needs a recent npm CLI
+      - run: npm install --no-audit --no-fund && npm run typecheck
+      - run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}   # only needed for the very first publish
+
+  github-release:
+    needs: [verify, container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.TAG }}" }
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v v="${{ needs.verify.outputs.version }}" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}' CHANGELOG.md > notes.md
+          cat >> notes.md <<EOF
+
+          ### Install
+          - Container: \`docker pull ghcr.io/${{ github.repository }}:${{ needs.verify.outputs.version }}\`
+          - Python: \`pip install myelinate==${{ needs.verify.outputs.version }}\`
+          - OpenClaw plugin: \`@myelinate/openclaw-plugin@${{ needs.verify.outputs.version }}\`
+
+          Docs: https://notaaaronfr.github.io/myelinate/
+          EOF
+      - run: gh release create "$TAG" --title "Myelinate $TAG" --notes-file notes.md --verify-tag || gh release edit "$TAG" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
