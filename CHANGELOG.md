@@ -5,6 +5,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-16
+
+### Fixed
+- The OpenClaw plugin ships compiled JavaScript (`dist/`), so `openclaw plugins install @myelinate/openclaw-plugin`
+  works from npm. 0.2.0 contained only TypeScript sources, which OpenClaw loads only from local checkouts.
+
+### Changed
+- Install from the registries: `pip install myelinate`, `ghcr.io/notaaaronfr/myelinate`, and
+  `@myelinate/openclaw-plugin` on npm.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added

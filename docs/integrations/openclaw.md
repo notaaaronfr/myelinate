@@ -12,14 +12,11 @@ adds three tools. It needs no changes to your agents.
 
 ## Install
 
-From a checkout of the repository:
+From npm ([`@myelinate/openclaw-plugin`](https://www.npmjs.com/package/@myelinate/openclaw-plugin), published with
+signed provenance):
 
 ```bash
-cd adapters/openclaw
-npm install --no-audit --no-fund          # installs the plugin's dependency (@sinclair/typebox)
-cd ../..
-
-openclaw plugins install ./adapters/openclaw --link --force --accept-capabilities
+openclaw plugins install @myelinate/openclaw-plugin --force --accept-capabilities
 openclaw config set plugins.entries.myelinate.config.gatewayUrl "https://learner.internal:8080"
 openclaw config set plugins.entries.myelinate.hooks.allowConversationAccess true
 openclaw plugins enable myelinate
@@ -27,10 +24,18 @@ openclaw plugins enable myelinate
 
 What the flags do:
 
-- `--link` loads the plugin from the directory in place (it is added to `plugins.load.paths`) instead of copying it,
-  so `git pull` updates it. Run `openclaw plugins reload myelinate` after pulling.
-- `--force` confirms the local source for a non-interactive install. Review the source first.
+- `--force` confirms a source outside OpenClaw's ClawHub registry for a non-interactive install. Review the package
+  first (`npm view @myelinate/openclaw-plugin`).
 - `--accept-capabilities` records consent for the capabilities the plugin declares (the three tools).
+
+To run the plugin from a checkout instead (for development), build it, then link the directory so `git pull` plus a
+rebuild updates it:
+
+```bash
+cd adapters/openclaw && npm install --no-audit --no-fund && npm run build && cd ../..
+openclaw plugins install ./adapters/openclaw --link --force --accept-capabilities
+# after changes: npm run build in adapters/openclaw, then openclaw plugins reload myelinate
+```
 
 `hooks.allowConversationAccess` is **required**. The plugin uses the `before_prompt_build` and `agent_end` hooks, and
 OpenClaw only lets non-bundled plugins use conversation hooks with this grant. Note that it sits under `hooks`, not

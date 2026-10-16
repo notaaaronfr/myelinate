@@ -32,7 +32,7 @@ uv run ruff check src tests --select E,F,B,ASYNC --ignore E501,B008
 uv run pytest -q
 uv run python scripts/gen_reference.py            # regenerates docs/reference/{configuration,api}.md
 uv run --group docs mkdocs build --strict          # docs build without warnings
-cd adapters/openclaw && npm install && npm run typecheck   # if you touched the plugin (Node 24)
+cd adapters/openclaw && npm install && npm run typecheck && npm run build   # if you touched the plugin (Node 24)
 ```
 
 CI runs all of these, plus a Docker build and smoke test.

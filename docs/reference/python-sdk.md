@@ -3,8 +3,9 @@
 The `myelinate` package includes clients and framework adapters. Install it with the extras you need:
 
 ```bash
-pip install "myelinate @ git+https://github.com/notaaaronfr/myelinate"          # client + gateway
-pip install "myelinate[maf] @ git+https://github.com/notaaaronfr/myelinate"     # + Microsoft Agent Framework adapter
+pip install myelinate             # client + gateway
+pip install "myelinate[maf]"      # + Microsoft Agent Framework adapter
+pip install "myelinate[otel]"     # + OpenTelemetry tracing of the gateway itself
 ```
 
 ## Clients

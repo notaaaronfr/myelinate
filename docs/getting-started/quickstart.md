@@ -17,14 +17,14 @@ This takes about five minutes. You run the gateway locally, give it a skill, and
 === "Python (pip)"
 
     ```bash
-    pip install "myelinate @ git+https://github.com/notaaaronfr/myelinate"
+    pip install myelinate
     MYELINATE_ENV=dev myelinate serve --port 8080
     ```
 
 === "Docker"
 
     ```bash
-    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.2.0
+    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.2.1
     ```
 
 `MYELINATE_ENV=dev` turns authentication off and puts everything in a tenant called `dev`. Use it only on your own

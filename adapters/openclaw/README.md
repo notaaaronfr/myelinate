@@ -9,7 +9,7 @@ Self-improving skills and memory for [OpenClaw](https://openclaw.ai) agents, thr
 - **Fails open:** if the gateway is unreachable, turns run normally.
 
 ```bash
-openclaw plugins install @myelinate/openclaw-plugin
+openclaw plugins install @myelinate/openclaw-plugin --force --accept-capabilities
 openclaw config set plugins.entries.myelinate.config.gatewayUrl https://myelinate.internal
 openclaw config set plugins.entries.myelinate.hooks.allowConversationAccess true
 export MYELINATE_API_KEY=myl_...        # a tenant key with the `learn` scope
