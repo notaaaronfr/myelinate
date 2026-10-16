@@ -4,18 +4,56 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 [![Docs](https://img.shields.io/badge/docs-notaaaronfr.github.io%2Fmyelinate-6f42c1)](https://notaaaronfr.github.io/myelinate/)
+[![PyPI](https://img.shields.io/pypi/v/myelinate)](https://pypi.org/project/myelinate/)
+[![npm](https://img.shields.io/npm/v/@myelinate/openclaw-plugin?label=openclaw%20plugin)](https://www.npmjs.com/package/@myelinate/openclaw-plugin)
 
-**Self-improving skills and memory for any AI agent framework, with governance built in.**
+**Your agents make the same mistakes twice. Myelinate makes them learn.**
 
-**[Documentation](https://notaaaronfr.github.io/myelinate/)** ·
-[Quickstart](https://notaaaronfr.github.io/myelinate/getting-started/quickstart/) ·
-[Integrations](https://notaaaronfr.github.io/myelinate/integrations/overview/) ·
-[Deployment](https://notaaaronfr.github.io/myelinate/deployment/kubernetes/) ·
-[API reference](https://notaaaronfr.github.io/myelinate/reference/api/)
+Myelinate plugs into any agent framework and turns feedback your team already has (tests, CI, review bots, user
+corrections) into skills the agent uses on the next run. No fine-tuning, no prompt edits. Every change is reviewed,
+tested on live traffic and reversible.
+
+<p align="center"><img src="docs/assets/demo.gif" alt="An agent fails a commit-lint check, Myelinate learns the convention in 14 seconds, and the next task passes" width="860"></p>
+
+### Does it work?
+
+In the [house-rules benchmark](benchmarks/house_rules/), Claude Haiku 5.5 has to follow team conventions it was
+never told: commit format, migration rules, support-reply style and docstring rules. It learns only from CI-style
+verifier feedback. On **tasks it never trained on**, its pass rate went from **0% to 91% after 24 runs**, for about
+$1.25 of learning.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.svg">
+  <img alt="Held-out pass rate rises from 0% to 91% over 24 training runs" src="docs/assets/benchmark-light.svg">
+</picture>
+
+### Try it
+
+```bash
+pip install myelinate
+MYELINATE_ENV=dev myelinate serve          # REST + MCP gateway on :8080, interactive API docs at /docs
+```
+
+See it learn (the demo above; a few cents with your Anthropic key):
+
+```bash
+git clone https://github.com/notaaaronfr/myelinate && cd myelinate
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env && set -a && . ./.env && set +a
+uv run python examples/demo_learning.py
+```
+
+Connect your agent: [Microsoft Agent Framework](https://notaaaronfr.github.io/myelinate/integrations/microsoft-agent-framework/) ·
+[OpenClaw](https://notaaaronfr.github.io/myelinate/integrations/openclaw/) ·
+[MCP](https://notaaaronfr.github.io/myelinate/integrations/mcp/) ·
+[OpenTelemetry (zero code)](https://notaaaronfr.github.io/myelinate/integrations/opentelemetry/) ·
+[LangGraph, CrewAI and others](https://notaaaronfr.github.io/myelinate/integrations/other-frameworks/) ·
+**[Full documentation](https://notaaaronfr.github.io/myelinate/)**
 
 > *Myelin* is the sheath the brain builds around pathways that get used, and that work, so they fire faster and more
 > reliably. Myelinate does the same for agents: rules that help get reinforced, rules that hurt get corrected or retired,
 > and nothing changes without evidence.
+
+## How it works
 
 A drop-in component that gives **any** agent framework a self-improvement loop: learned skills, persistent memory,
 reflection, and skill evolution. Every change is governed, measured and reversible.

@@ -1,0 +1,140 @@
+{
+  "agent_model": "claude-haiku-5-5",
+  "learning_model": "claude-opus-5-5",
+  "epochs": 2,
+  "train_tasks": 24,
+  "test_tasks": 16,
+  "samples_per_test_task": 2,
+  "curve": [
+    {
+      "train_runs": 0,
+      "commit": 0.0,
+      "migration": 0.0,
+      "python": 0.0,
+      "support": 0.0,
+      "overall": 0.0
+    },
+    {
+      "train_runs": 8,
+      "commit": 0.5,
+      "migration": 0.5,
+      "python": 0.0,
+      "support": 0.0,
+      "overall": 0.25
+    },
+    {
+      "train_runs": 16,
+      "commit": 0.25,
+      "migration": 0.5,
+      "python": 0.0,
+      "support": 1.0,
+      "overall": 0.4375
+    },
+    {
+      "train_runs": 24,
+      "commit": 0.25,
+      "migration": 0.5,
+      "python": 1.0,
+      "support": 1.0,
+      "overall": 0.6875
+    },
+    {
+      "train_runs": 32,
+      "commit": 0.25,
+      "migration": 0.5,
+      "python": 1.0,
+      "support": 1.0,
+      "overall": 0.6875
+    },
+    {
+      "train_runs": 40,
+      "commit": 0.375,
+      "migration": 0.5,
+      "python": 1.0,
+      "support": 1.0,
+      "overall": 0.71875
+    },
+    {
+      "train_runs": 48,
+      "commit": 0.125,
+      "migration": 0.5,
+      "python": 1.0,
+      "support": 1.0,
+      "overall": 0.65625
+    }
+  ],
+  "train_pass_rate_in_order": [
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true
+  ],
+  "learning_llm": {
+    "calls": 506,
+    "input_tokens": 844022,
+    "output_tokens": 223184,
+    "by_purpose": {
+      "reflect": 47,
+      "curate": 21,
+      "memory": 19,
+      "judge_skill": 379,
+      "evolve": 40
+    }
+  },
+  "agent_llm": {
+    "calls": 272,
+    "input_tokens": 255834,
+    "output_tokens": 52731
+  },
+  "skills_learned": {
+    "writing-git-commit-messages": "---\nname: writing-git-commit-messages\ndescription: Use when writing or formatting a git commit message for a repository, especially where commit linting (e.g. commitlint) or CI checks enforce a message format.\nmetadata:\n  version: 4\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-git-commit-messages\n\n## Steps\n- Before writing a commit message, check the repo's commit conventions: look for a commitlint config and scan recent git log subjects. Follow that format instead of a generic imperative style. <!-- b-c41ed7f0 -->\n- When the repo enforces Conventional Commits, write the subject as 'type(scope): description' (e.g. 'fix(<area>): <what changed>'). Keep the description lowercase and leave off any trailing period. <!-- b-6035402e -->\n\n## Pitfalls\n- When writing the commit body, include only details the change description supports or that you verified in the diff. Do not invent specifics such as parameter names or implementation choices. <!-- b-304ae00a -->\n\n## Heuristics\n- When the change references a ticket, keep a descriptive body and add a footer such as 'Refs: <TICKET-ID>' rather than putting the ticket in the subject. <!-- b-068d3aff -->\n- When choosing the Conventional Commits type and scope, match them to the change: 'chore(deps)' for dependency upgrades, 'refactor' for removing dead code, 'feat' for new behavior, 'docs(<area>)' for documentation-only changes. <!-- b-df25dc93 -->\n\n## Verification\n- Before finalizing a commit subject in a repo with commitlint, read its header-max-length rule, count the full 'type(scope): description' length, and trim redundant words (e.g. repeated context already implied by scope) until it fits the limit. <!-- b-41a75476 -->\n",
+    "writing-database-migrations": "---\nname: writing-database-migrations\ndescription: Use when writing a SQL/database schema migration (e.g. PostgreSQL CREATE/ALTER TABLE) in a repository, especially where a migration linter or CI enforces structure.\nmetadata:\n  version: 5\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-database-migrations\n\n## Steps\n- Before writing a migration, open an existing migration and the migration-lint config. Reproduce their exact structure: transaction wrapper, guards, statement order and literal section markers such as the rollback header's exact text and case. Never invent labels, and never ship placeholder markers or 'replace later' notes. <!-- b-f16c3717 -->\n\n## Pitfalls\n- When creating or dropping objects in a migration, do not emit bare DDL; wrap it in the transaction format the repo uses, add guards like IF NOT EXISTS / IF EXISTS, and include the repo's down/rollback section. <!-- b-ee4912eb -->\n- When adding the down/rollback section, place it exactly where existing migrations do (e.g. after the up section's COMMIT, at file end). Never place it inside the up transaction, or the rollback DDL runs alongside the up DDL and undoes it. <!-- b-a7240717 -->\n\n## Verification\n- Before finishing a migration, confirm that the rollback section reverses every object the migration creates and uses the same naming as the up section. <!-- b-468b36ed -->\n- Before finishing a migration, compare its first line and every section header character-for-character against an existing linted migration, including punctuation such as trailing colons. Check that no stray comment precedes the required opening statement and that the rollback marker matches exactly. <!-- b-c61ff168 -->\n",
+    "writing-customer-support-replies": "---\nname: writing-customer-support-replies\ndescription: Use when drafting a reply to a customer support email or ticket, especially where a support QA check enforces the greeting, signature, and content rules.\nmetadata:\n  version: 5\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-customer-support-replies\n\n## Steps\n- When drafting a customer support reply, output only the email body. Make the first line exactly 'Hi <FirstName>,' and do not put any subject line, header, or other text above it. <!-- b-d8b708b4 -->\n- When ending a customer support reply, make the final line exactly the house signature ('\u2014 Acme Support'). Do not add a conventional sign-off such as 'Best regards' or a team name variant. <!-- b-93e06612 -->\n- When a support task provides a ticket number, reference it in the reply body in the format '#<ticket-number>' (e.g. 'We're looking into ticket #<ticket-number> now'), between the exact greeting and signature. <!-- b-f53c4da9 -->\n\n## Pitfalls\n- When a customer asks for a refund or disputes a charge, state explicitly that the billing team will review the charge. Never use wording that promises, confirms or frames a refund outcome, such as 'your refund request'. Optionally ask for the charge date and amount. <!-- b-d36be885 -->\n\n## Heuristics\n- When a support ticket reports a bug or malfunction (e.g. a feature or code failing), ask for diagnostic details such as device, OS or app version, exact error message and reproduction conditions. Do not promise a fix or a timeline. <!-- b-2ed2c168 -->\n- When a support ticket is a how-to question rather than a bug report, answer it directly with steps. Skip diagnostic requests (device, OS, error message), and do not assert specific UI paths or menu names you cannot confirm exist. <!-- b-2b584891 -->\n\n## Verification\n- Before finishing a support reply, check character-for-character that the first line is the exact greeting, the last line is the exact signature, nothing precedes or follows them, and any given ticket number appears as '#<ticket-number>'. <!-- b-e62eaebd -->\n",
+    "writing-python-docstrings": "---\nname: writing-python-docstrings\ndescription: Use when writing or documenting Python functions in a repository where a review bot or CI (e.g. python-ci review-bot) checks docstring style.\nmetadata:\n  version: 2\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-python-docstrings\n\n## Steps\n- When writing a Python function for a repo checked by python-ci review-bot, write a Google-style docstring: a summary line, then Args:, Returns: and Raises: sections, never free-form prose. <!-- b-5ba6e0dd -->\n\n## Heuristics\n- When deciding what goes under Raises:, raise only on genuinely invalid input and keep conventional edge-case behaviour (e.g. return an empty result for empty input). Never add restrictions just to fill the docstring, and make sure every documented exception is actually raised by the code. <!-- b-568fe435 -->\n\n## Verification\n- Before finishing a Python function, check that the docstring documents each parameter with its type under Args:, the return type under Returns:, and every exception the function raises, with its condition, under Raises:. <!-- b-156acec1 -->\n"
+  },
+  "wall_seconds": 3766
+}

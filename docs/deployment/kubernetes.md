@@ -17,7 +17,7 @@ you can apply with `kubectl apply -k` or pull into your own kustomize overlay.
 | `postgres-dev.yaml` | single-replica Postgres StatefulSet, **for trying it out only** | optional |
 
 !!! note "Images"
-    The manifests use the official multi-arch image `ghcr.io/notaaaronfr/myelinate`, pinned to `0.2.2` in
+    The manifests use the official multi-arch image `ghcr.io/notaaaronfr/myelinate`, pinned to `0.3.0` in
     `kustomization.yaml`. Bump `newTag` (or pin a digest) to upgrade. To run your own build, see
     [Docker](docker.md#build-and-publish-your-own-image) and change `newName`.
 
@@ -102,7 +102,7 @@ resources:
 images:
   - name: ghcr.io/notaaaronfr/myelinate
     newName: registry.example.com/myelinate
-    newTag: "0.2.2"
+    newTag: "0.3.0"
 patches:
   - target: { kind: ConfigMap, name: myelinate-config }
     patch: |-

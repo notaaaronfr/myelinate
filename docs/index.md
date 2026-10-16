@@ -10,6 +10,16 @@ preferences. Every change is reviewed by policy or a human, tested on live traff
 > *Myelin* is the sheath the brain builds around pathways that get used, and that work, so they fire faster and more
 > reliably. Myelinate does the same for agents.
 
+## Does it work?
+
+In the [house-rules benchmark](benchmark.md), an agent learns team conventions it was never told from CI-style
+feedback alone. On tasks it never trained on, its pass rate went from **0% to 91% after 24 runs**.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/benchmark-dark.svg">
+  <img alt="Held-out pass rate rises from 0% to 91% over 24 training runs" src="assets/benchmark-light.svg">
+</picture>
+
 ## Why Myelinate
 
 - **Works with your framework.** Plugs into Microsoft Agent Framework, OpenClaw, LangGraph, CrewAI, the OpenAI Agents

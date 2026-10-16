@@ -1,6 +1,6 @@
 [project]
 name = "myelinate"
-version = "0.2.2"
+version = "0.3.0"
 description = "Self-improving skills and memory for any AI agent framework, with governance built in"
 readme = "README.md"
 license = "MIT"

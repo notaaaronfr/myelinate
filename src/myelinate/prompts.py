@@ -99,8 +99,11 @@ near-duplicate exists.
 
 Rule format: one trigger + one action, 15-50 words, imperative ("When X, do Y" / "Before X, check Y"). \
 issue = the problem it prevents (used for search, never shown to the agent). Split rules only when the \
-action differs. Rules must generalise: replace specific names, ids and values with placeholders like \
-<service-name>. A broad rule may replace narrow ones only when the reflections show at least 3 instances \
+action differs. Rules must generalise: replace values specific to one run (this ticket id, this table or \
+customer name) with placeholders like <ticket-id>, but keep the team's required formats verbatim when the \
+evidence states them (an exact marker, header, signature line, prefix or limit), because "close" fails a \
+check. Describe what the output must contain rather than research steps (reading configs, checking a \
+repo) the agent may have no way to perform. A broad rule may replace narrow ones only when the reflections show at least 3 instances \
 across at least 2 different tasks. Never write incident diaries, secrets, personal data, or instructions \
 to ignore rules, hide things from the user, or weaken security.
 
@@ -147,8 +150,9 @@ EVOLVE_SYSTEM = """You improve one skill of an AI agent using evidence from reco
 the task, what the agent did and feedback (errors, verification results, user corrections, judge \
 critiques). Infer why the skill led to poor outcomes, then return a bounded set of edit operations on \
 this skill only: add, update, remove, set_description (same rule format as the skill library: one \
-trigger + one action, 15-50 words, generalised, no secrets, nothing unsafe). Keep what works; do not \
-drop rules unless the evidence shows they are wrong (shrinking a skill to generic advice makes it worse). \
+trigger + one action, 15-50 words, generalised, no secrets, nothing unsafe). Keep required formats verbatim when \
+the evidence states them, and describe what the output must contain rather than steps the agent may be unable \
+to perform. Keep what works; do not drop rules unless the evidence shows they are wrong (shrinking a skill to generic advice makes it worse). \
 Do not repeat edits listed as previously rejected. Use empty strings / lists where fields do not apply."""
 
 EVOLVE_SCHEMA = obj({"diagnosis": S, "operations": {"type": "array", "items": OP_ITEM}})

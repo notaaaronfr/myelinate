@@ -49,6 +49,7 @@ nav:
   - Home: index.md
   - Getting started:
       - Quickstart: getting-started/quickstart.md
+      - Benchmark: benchmark.md
       - Concepts: getting-started/concepts.md
   - Integrations:
       - Overview: integrations/overview.md

@@ -29,7 +29,7 @@ def _commit_check(ticket: str) -> Callable[[str], list[str]]:
         if not re.fullmatch(r"(feat|fix|docs|refactor|perf|test|chore)\([a-z0-9-]+\): [a-z][^\n]{2,}[^.]", subject):
             errs.append(f"commitlint: subject must be 'type(scope): description' in lower case without a final period "
                         f"(got {subject!r})")
-        elif len(subject) > 60:
+        if len(subject) > 60:  # like commitlint, report every violated rule, not just the first
             errs.append(f"commitlint: subject must be at most 60 characters (got {len(subject)})")
         if len(lines) < 3 or lines[1] != "":
             errs.append("commitlint: a blank line and a body explaining why are required after the subject")

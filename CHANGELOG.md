@@ -5,6 +5,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
+### Added
+- House-rules benchmark (`benchmarks/house_rules/`): an agent learns team conventions from verifier feedback alone.
+  Held-out pass rate went from 0% to 91% after 24 runs. Includes a chart generator and the run history.
+- `examples/demo_learning.py`: watch an agent fail, learn and pass in about a minute.
+
+### Changed
+- Better learning quality, found with the benchmark:
+  - The curator and evolver never state specific values (limits, names, numbers) that the evidence doesn't contain.
+  - They keep required formats (markers, signatures, prefixes, limits) verbatim, and use placeholders only for
+    run-specific values.
+  - Rules describe what the output must contain, not research steps the agent may be unable to perform.
+  - New evidence that contradicts a rule updates that rule instead of adding a second one.
+
 ## [0.2.2] - 2026-10-16
 
 ### Changed
