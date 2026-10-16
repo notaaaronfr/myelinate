@@ -1,0 +1,93 @@
+{
+  "agent_model": "claude-haiku-5-5",
+  "learning_model": "claude-opus-5-5",
+  "epochs": 1,
+  "train_tasks": 24,
+  "test_tasks": 16,
+  "samples_per_test_task": 2,
+  "curve": [
+    {
+      "train_runs": 0,
+      "commit": 0.0,
+      "migration": 0.0,
+      "python": 0.0,
+      "support": 0.0,
+      "overall": 0.0
+    },
+    {
+      "train_runs": 8,
+      "commit": 0.375,
+      "migration": 1.0,
+      "python": 0.0,
+      "support": 0.0,
+      "overall": 0.34375
+    },
+    {
+      "train_runs": 16,
+      "commit": 0.5,
+      "migration": 1.0,
+      "python": 0.0,
+      "support": 1.0,
+      "overall": 0.625
+    },
+    {
+      "train_runs": 24,
+      "commit": 0.5,
+      "migration": 1.0,
+      "python": 1.0,
+      "support": 0.875,
+      "overall": 0.84375
+    }
+  ],
+  "train_pass_rate_in_order": [
+    false,
+    true,
+    false,
+    true,
+    true,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    true,
+    true
+  ],
+  "learning_llm": {
+    "calls": 117,
+    "input_tokens": 209707,
+    "output_tokens": 56338,
+    "by_purpose": {
+      "reflect": 25,
+      "curate": 11,
+      "memory": 9,
+      "judge_skill": 63,
+      "evolve": 8,
+      "dedup": 1
+    }
+  },
+  "agent_llm": {
+    "calls": 152,
+    "input_tokens": 96230,
+    "output_tokens": 23054
+  },
+  "skills_learned": {
+    "writing-git-commit-messages": "---\nname: writing-git-commit-messages\ndescription: Use when writing or formatting a git commit message for a repository change, especially where CI may enforce a commit convention such as commitlint or Conventional Commits.\nmetadata:\n  version: 2\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-git-commit-messages\n\n## Steps\n- Before writing a commit message, check the repo for a commit convention: commitlint config files, a commitlint entry in package.json, CONTRIBUTING docs, or recent git log subjects. Follow whatever convention you find. <!-- b-abc53564 -->\n- When the repo uses or may use commitlint/Conventional Commits, format the subject as 'type(scope): description' (e.g. fix(<area>): <summary>), in lower case, imperative mood, with no trailing period. <!-- b-2a9f3e55 -->\n\n## Heuristics\n- When a change has a ticket ID, put a body explaining what changed and why, then a footer line 'Refs: <TICKET-ID>'. Keep the ticket out of the subject unless the convention requires it there. <!-- b-8990da1d -->\n- When choosing the Conventional Commits type, match the nature of the change: 'refactor' for removing dead code or restructuring without behaviour change, 'docs' for documentation-only changes, 'fix' for correcting behaviour, 'feat' for new capability. Use the affected service as scope. <!-- b-85445cff -->\n\n## Verification\n- Before finalizing, check the subject against the convention: a valid type, an optional scope in parentheses, a colon followed by a space, lower case, no final period, and length within the configured limit (typically 72-100 characters). <!-- b-39aef740 -->\n",
+    "writing-postgresql-migrations": "---\nname: writing-postgresql-migrations\ndescription: Use when writing a PostgreSQL schema migration (create/alter table, index, column), especially in projects where CI lints migration files.\nmetadata:\n  version: 2\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-postgresql-migrations\n\n## Steps\n- Before writing a migration, inspect existing migration files or the migration-lint config, if available, to learn house conventions. Follow those conventions instead of emitting bare generic SQL. <!-- b-650db9bc -->\n- When the project lints migrations or the convention is unknown, wrap the up migration in BEGIN; ... COMMIT; and use IF NOT EXISTS on CREATE TABLE, CREATE INDEX and ADD COLUMN. Give every index an explicit name so the down step can DROP INDEX IF EXISTS <index-name>. <!-- b-0ad026e5 -->\n- End every migration file with a '-- down:' rollback section that reverses the up step idempotently, e.g. DROP TABLE IF EXISTS <table-name>; for a created table. <!-- b-9e103f3d -->\n\n## Verification\n- Before finalizing a migration, check: transaction wrapper present, IF NOT EXISTS / IF EXISTS guards on every DDL statement, and a trailing '-- down:' section that undoes each up change. <!-- b-5c06f3b4 -->\n",
+    "writing-customer-support-replies": "---\nname: writing-customer-support-replies\ndescription: Use when drafting a reply to a customer support email or ticket (complaints, refunds, damaged orders), especially where a QA check such as support-qa enforces greeting, signature and policy conventions.\nmetadata:\n  version: 2\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-customer-support-replies\n\n## Steps\n- Before drafting a support reply, look up the support-qa or house style conventions: the exact greeting format, the exact signature line, and the refund/compensation policy. Follow them instead of writing a generic reply. <!-- b-a0d03338 -->\n- Open the reply with exactly 'Hi <customer-first-name>,'. Apologize once, without repeating the apology, and end with the house signature, e.g. '\u2014 Acme Support', as the very last line, with no other sign-off. <!-- b-c5f8c929 -->\n- When the task gives a ticket number, reference it in the reply body in exactly the '#<ticket-number>' format, e.g. 'regarding your ticket #<ticket-number>'. <!-- b-8d601514 -->\n\n## Pitfalls\n- When a customer asks for their money back, never promise, start or confirm a refund. State that the billing team will review the request, and ask for the details needed, such as the order number and photos of the damage. <!-- b-cf3b470d -->\n\n## Verification\n- Before sending, check the reply: the greeting matches exactly, the ticket appears as '#<ticket-number>' if one was given, there is no refund promise or confirmation, no sentence is duplicated, and the final line is exactly the house signature. <!-- b-82861828 -->\n",
+    "writing-python-functions": "---\nname: writing-python-functions\ndescription: Use when writing or modifying a Python function for a project, especially where CI or a review bot (e.g. python-ci) enforces code style such as docstring format.\nmetadata:\n  version: 3\n  tags: []\n  learned_by: myelinate\n---\n\n# writing-python-functions\n\n## Steps\n- Before finishing a Python function, look up the project's conventions (docstring format, typing, linting, and error handling such as no-silent-defaults rules) and follow them rather than choosing your own behaviour or free-form documentation. <!-- b-a3c99437 -->\n- When writing a Python function for a project using Google-style docstrings, include a summary line plus Args: (name (type): description), Returns: (type: description), and Raises: sections listing every exception raised. <!-- b-9ce66fc0 -->\n\n## Pitfalls\n- When input is malformed or degenerate (missing separator, empty component, pattern mismatch, non-positive or non-int size/count, empty result), raise ValueError instead of returning a silent fallback, and list it under Raises:. <!-- b-d87a24e5 -->\n\n## Verification\n- Before submitting, check the docstring: every parameter appears under Args: with its type, the return type appears under Returns:, and every exception the code can raise (e.g. ValueError on malformed input) appears under Raises:. <!-- b-5faf8a75 -->\n"
+  },
+  "wall_seconds": 511
+}

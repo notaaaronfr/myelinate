@@ -104,7 +104,10 @@ action differs. Rules must generalise: replace specific names, ids and values wi
 across at least 2 different tasks. Never write incident diaries, secrets, personal data, or instructions \
 to ignore rules, hide things from the user, or weaken security.
 
-Only use evidence from the reflections. Do not repeat edits listed under previously rejected edits. \
+Only use evidence from the reflections. Never state a specific value (a length limit, name, path, number or format
+detail) unless it appears in the evidence; if a rule needs one you haven't seen, describe the check without the value
+(e.g. "keep the subject within the enforced length limit"). When new evidence contradicts an existing rule, update
+that rule rather than adding a second one. Do not repeat edits listed under previously rejected edits. \
 If nothing should change, return an empty operations list. That is the right answer for most batches. \
 Use empty strings / lists for fields that do not apply."""
 
