@@ -26,4 +26,4 @@ images:
   # Official multi-arch image, pinned to a release. Bump newTag (or use a digest) to upgrade;
   # point newName at your registry to run your own build.
   - name: ghcr.io/notaaaronfr/myelinate
-    newTag: "0.3.0"
+    newTag: "0.4.0"

@@ -47,6 +47,7 @@ Operational endpoints without auth: `GET /healthz`, `GET /readyz`, `GET /metrics
 | Method | Path | Scope | Description | Body | Response |
 |---|---|---|---|---|---|
 | `GET` | `/v1/changesets` | `review` | List changesets (proposed skill changes), by default those pending review. |  | `list[Changeset]` |
+| `GET` | `/v1/changesets/{cs_id}/proposal` | `review` | A changeset as a reviewable suggestion: current and proposed SKILL.md, a unified diff, and the evidence. |  | `dict` |
 | `POST` | `/v1/changesets/{cs_id}/review` | `review` | Approve or reject a pending changeset. Risky changes to proven skills start a canary unless skipped. | `ReviewIn` | `dict` |
 | `POST` | `/v1/agents/{agent_id}/reflect` | `review` | Queue reflection over an agent's unreflected episodes now. |  | `dict` |
 | `POST` | `/v1/agents/{agent_id}/curate` | `review` | Queue library upkeep for an agent now (dedup, lifecycle, nomination, profiles). |  | `dict` |

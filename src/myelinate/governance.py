@@ -99,10 +99,59 @@ class Governance:
             await ses.commit()
         metrics.changesets.labels(source=source, status="proposed").inc()
         if auto and self.auto_approvable(row):
-            await self.review(tenant, "system:policy", row.id, approve=True, comment="auto-approved by policy")
+            row.status = await self.review(tenant, "system:policy", row.id, approve=True,
+                                           comment="auto-approved by policy")
+        if row.status == "pending" and (auto or row.safety_findings):  # authored changes are approved by their author
+            await self.notify(tenant, "changeset.proposed", row.id)
         return row
 
+    async def notify(self, tenant: str, event: str, ref: str) -> None:
+        """Queue a signed webhook delivery (durable and retried by the worker), if subscribed."""
+        if self.c.s.webhook_url and event in self.c.s.webhook_events:
+            async with self.c.db.session() as ses:
+                await self.c.enqueue(ses, tenant, "webhook", {"event": event, "ref": ref})
+                await ses.commit()
+
+    async def proposal(self, tenant: str, cs_id: str) -> dict[str, Any]:
+        """A changeset as a reviewable suggestion: per skill, the current and proposed SKILL.md and a unified diff,
+        plus the evidence it came from. This is what to promote in an external content or review system."""
+        import difflib
+
+        from .db import EpisodeRow
+        from .skills import to_skill_md
+
+        async with self.c.db.session() as ses:
+            cs = await ses.get(ChangesetRow, cs_id)
+            if cs is None or cs.tenant_id != tenant:
+                raise NotFound(cs_id)
+            skills, _ = await self.library(ses, tenant, cs.agent_id)
+            out = []
+            for name in dict.fromkeys(op["skill"] for op in cs.ops):
+                sk = skills.get(name)
+                cur = await self.active_bullets(ses, sk.id) if sk else []
+                desc, ver, tags = (sk.description, sk.version, sk.tags or []) if sk else ("", 0, [])
+                new, new_desc = simulate(cur, desc, cs.ops, name)
+                cur_md = to_skill_md(name, desc, ver, tags, cur) if sk else ""
+                new_md = to_skill_md(name, new_desc, ver + 1, tags, new)
+                diff = "".join(difflib.unified_diff(cur_md.splitlines(True), new_md.splitlines(True),
+                                                    f"{name}/SKILL.md (v{ver})", f"{name}/SKILL.md (proposed)"))
+                out.append({"skill": name, "skill_id": sk.id if sk else None, "current_version": ver,
+                            "current_skill_md": cur_md, "proposed_skill_md": new_md, "diff": diff,
+                            "ops": [o for o in cs.ops if o["skill"] == name]})
+            eps = (await ses.scalars(select(EpisodeRow).where(EpisodeRow.id.in_(cs.episode_ids[:20])))).all() \
+                if cs.episode_ids else []
+            evidence = [{"episode_id": e.id, "task": (e.task or "")[:300], "outcome": e.outcome,
+                         "verification": e.meta.get("verification"), "feedback_score": e.feedback_score,
+                         "created_at": e.created_at.isoformat()} for e in eps]
+        return {"changeset_id": cs.id, "agent_id": cs.agent_id, "status": cs.status, "risk": cs.risk,
+                "source": cs.source, "rationale": cs.rationale, "eval_score": cs.eval_score,
+                "baseline_score": cs.baseline_score, "safety_findings": cs.safety_findings,
+                "created_at": cs.created_at.isoformat(), "skills": out, "evidence": evidence,
+                "approve_url": f"/v1/changesets/{cs.id}/review"}
+
     def auto_approvable(self, cs: ChangesetRow) -> bool:
+        if self.c.s.governance_mode == "propose_only":
+            return False
         blocking = [f for f in cs.safety_findings if not f.startswith("lint:")]
         if blocking:
             return False
@@ -133,6 +182,8 @@ class Governance:
             await ses.commit()
             status = cs.status
         metrics.changesets.labels(source=cs.source, status=status).inc()
+        if actor != "system:policy":
+            await self.notify(tenant, "changeset.reviewed", cs_id)
         return status
 
     async def _stale(self, ses: AsyncSession, cs: ChangesetRow) -> str | None:
@@ -159,7 +210,8 @@ class Governance:
             cs.status = "approved"  # queued; re-evaluated when the running canary on that skill ends
             self.c.audit(ses, tenant, actor, "changeset.queued", cs.id, behind=[e.id for e in running])
             return
-        if self.c.s.canary_enabled and not skip_canary and cs.risk != "low" and len(touched) == 1:
+        if (self.c.s.canary_enabled and self.c.s.governance_mode == "auto" and not skip_canary
+                and cs.risk != "low" and len(touched) == 1):
             sk = await ses.get(SkillRow, next(iter(touched)))
             if sk is not None and sk.uses >= self.c.s.canary_min_samples:
                 await self._start_canary(ses, cs, sk)

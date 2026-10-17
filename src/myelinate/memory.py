@@ -105,8 +105,8 @@ class MemoryService:
                 c = cands[i]
                 content = clip((d.get("content") or c["content"]).strip(), 1000)
                 findings = safety.scan(content, 2000)
-                status = ("active" if self.c.s.auto_approve_memories and not findings and not d.get("hold")
-                          else "pending")
+                status = ("active" if self.c.s.governance_mode == "auto" and self.c.s.auto_approve_memories
+                          and not findings and not d.get("hold") else "pending")
                 row = MemoryRow(id=new_id("mem"), tenant_id=tenant, agent_id=agent_id, user_id=c["user_id"],
                                 kind=c["kind"], status=status, content=content, content_hash=content_hash(content),
                                 sources=sources[:20])
@@ -121,6 +121,8 @@ class MemoryService:
                         row.sources = list(dict.fromkeys([*old.sources, *row.sources]))[-20:]
                 self.c.audit(ses, tenant, actor, f"memory.{d.get('action')}", row.id, status=status,
                              target=d.get("target_id") or None, findings=findings)
+                if status == "pending" and self.c.s.webhook_url and "memory.pending" in self.c.s.webhook_events:
+                    await self.c.enqueue(ses, tenant, "webhook", {"event": "memory.pending", "ref": row.id})
                 if c["user_id"]:
                     await self.mark_profile_dirty(ses, tenant, agent_id, c["user_id"])
             embs2 = await self.c.embed([t for _, t in texts])

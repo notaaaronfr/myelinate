@@ -7,7 +7,7 @@ docs/reference/configuration.md, so keep them accurate.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,13 +23,25 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./myelinate.db"
 
     # --- LLM used for reflection, curation, judging and evolution ------------
-    # `anthropic` uses Claude for learning; `none` disables learning-side LLM calls (recall/record still work).
-    llm_provider: Literal["anthropic", "none"] = "anthropic"
+    # `anthropic` uses Claude directly. `openai_compatible` uses any OpenAI-style chat completions endpoint
+    # (OpenRouter, Azure OpenAI, vLLM, LiteLLM, Ollama) at MYELINATE_LLM_BASE_URL. `none` disables learning-side
+    # LLM calls (recall and record still work).
+    llm_provider: Literal["anthropic", "openai_compatible", "none"] = "anthropic"
     # Anthropic API key. Also read from plain ANTHROPIC_API_KEY (env or .env); unset means the SDK's default lookup.
     anthropic_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("MYELINATE_ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"))
-    # Model used for learning (not your agent's model).
+    # Model used for learning (not your agent's model). For OpenRouter use its id, e.g. `anthropic/claude-opus-5.5`.
     llm_model: str = "claude-opus-5-5"
+    # Base URL of the OpenAI-compatible endpoint, e.g. `https://openrouter.ai/api/v1`.
+    llm_base_url: str | None = None
+    # API key for the OpenAI-compatible endpoint.
+    llm_api_key: SecretStr | None = None
+    # Extra JSON merged into every OpenAI-compatible request, e.g. OpenRouter routing and privacy:
+    # `{"provider": {"data_collection": "deny", "zdr": true}}`.
+    llm_extra_body: dict[str, Any] = Field(default_factory=dict)
+    # How to request JSON from OpenAI-compatible models: `json_schema` (strict, preferred) or `json_object`
+    # (for models without structured outputs; the schema is then included in the prompt).
+    llm_json_mode: Literal["json_schema", "json_object"] = "json_schema"
     # Reasoning effort for learning calls. Lower is cheaper; raise for harder domains.
     llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     # Output token cap per learning call.
@@ -96,6 +108,10 @@ class Settings(BaseSettings):
     curate_every_n_episodes: int = 25
 
     # --- Governance -----------------------------------------------------------
+    # `auto` applies changes per the auto-approve settings below. `propose_only` never applies anything by itself:
+    # every skill change and memory waits as a proposal (no canaries), for a person to approve here or to promote
+    # in your own system (see the webhook settings and GET /v1/changesets/{id}/proposal).
+    governance_mode: Literal["auto", "propose_only"] = "auto"
     # Apply new memories without review (still safety-scanned; flagged ones wait for approval).
     auto_approve_memories: bool = True
     # Auto-apply purely additive skill changes (new rules / new skills).
@@ -146,6 +162,20 @@ class Settings(BaseSettings):
     profile_max_chars: int = 1400
     # Share facts learned from one user's runs with all users of the agent (off: they stay user-scoped).
     share_learned_facts: bool = False
+
+    # --- Webhooks -------------------------------------------------------------
+    # URL that receives signed JSON events (proposals for your own review or content system). Unset disables.
+    webhook_url: str | None = None
+    # Shared secret for the `X-Myelinate-Signature: sha256=<hmac>` header on every delivery.
+    webhook_secret: SecretStr | None = None
+    # Events to send: changeset.proposed, changeset.reviewed, memory.pending.
+    webhook_events: list[str] = Field(
+        default_factory=lambda: ["changeset.proposed", "changeset.reviewed", "memory.pending"])
+
+    # --- Data capture ---------------------------------------------------------
+    # `full` stores redacted messages and tool calls. `outcomes` stores only the task (truncated), outcome,
+    # verification details and tool names with their errors, so conversation text never reaches the database.
+    capture_mode: Literal["full", "outcomes"] = "full"
 
     # --- Ops ------------------------------------------------------------------
     # Run the background job worker inside the gateway process. Set false when running `myelinate worker` pods.

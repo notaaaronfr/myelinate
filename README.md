@@ -30,14 +30,22 @@ $1.25 of learning.
 ### Try it
 
 ```bash
-pip install myelinate
+pip install "myelinate[server]"
 MYELINATE_ENV=dev myelinate serve          # REST + MCP gateway on :8080, interactive API docs at /docs
+```
+
+In your agent's codebase, install only the client (`pip install myelinate`). It depends on just `httpx` and
+`pydantic`, so it fits next to pinned framework versions. The `[maf]` adapter works with Microsoft Agent Framework
+1.15 and later.
+
+```bash
+pip install "myelinate[maf]"               # client + Microsoft Agent Framework adapter
 ```
 
 See it learn (the demo above; a few cents with your Anthropic key):
 
 ```bash
-git clone https://github.com/notaaaronfr/myelinate && cd myelinate
+git clone https://github.com/notaaaronfr/myelinate && cd myelinate && uv sync --extra server
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env && set -a && . ./.env && set +a
 uv run python examples/demo_learning.py
 ```
@@ -159,7 +167,7 @@ have: **live canary rollout, a holdout control group that measures causal lift, 
 ## Quick start
 
 ```bash
-uv sync --extra maf
+uv sync --extra server --extra maf
 echo "ANTHROPIC_API_KEY=..." >> .env   # learning model (default claude-opus-5-5); read from env or .env
 MYELINATE_ENV=dev uv run myelinate serve --port 8080   # dev: no credentials, tenant "dev"
 open http://localhost:8080/docs

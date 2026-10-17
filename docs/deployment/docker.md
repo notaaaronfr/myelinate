@@ -12,7 +12,7 @@ declared volume). Because `MYELINATE_ENV=prod`, the gateway **refuses to start**
 !!! note "Images"
     Official images are published to `ghcr.io/notaaaronfr/myelinate` for `linux/amd64` and `linux/arm64`, tagged
     `X.Y.Z`, `X.Y` and `latest`, with signed build provenance. Pin a version in production. You can verify an image
-    with `gh attestation verify oci://ghcr.io/notaaaronfr/myelinate:0.3.0 --owner notaaaronfr`.
+    with `gh attestation verify oci://ghcr.io/notaaaronfr/myelinate:0.4.0 --owner notaaaronfr`.
 
 ## Single container (SQLite)
 
@@ -27,7 +27,7 @@ docker run -d --name myelinate \
   -e MYELINATE_BOOTSTRAP_ADMIN_KEY="$(openssl rand -base64 48)" \
   -e ANTHROPIC_API_KEY="sk-ant-..." \
   -e MYELINATE_MCP_ALLOWED_HOSTS='["localhost:*","127.0.0.1:*"]' \
-  ghcr.io/notaaaronfr/myelinate:0.3.0
+  ghcr.io/notaaaronfr/myelinate:0.4.0
 ```
 
 Read the bootstrap key back with `docker inspect` if you generated it inline, or better, keep it in an env file you
@@ -113,15 +113,15 @@ Notes:
 ## Build and publish your own image
 
 ```bash
-docker build -t ghcr.io/<you>/myelinate:0.3.0 .
-docker push ghcr.io/<you>/myelinate:0.3.0
+docker build -t ghcr.io/<you>/myelinate:0.4.0 .
+docker push ghcr.io/<you>/myelinate:0.4.0
 ```
 
 For mixed-architecture clusters, build both platforms:
 
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/<you>/myelinate:0.3.0 --push .
+  -t ghcr.io/<you>/myelinate:0.4.0 --push .
 ```
 
 The build installs the `otel` extra. Tag every release with a version (and deploy by digest if you can); avoid

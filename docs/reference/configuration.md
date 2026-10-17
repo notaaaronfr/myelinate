@@ -15,9 +15,13 @@ Every setting is an environment variable (or a line in `.env`). Names are `MYELI
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
-| `MYELINATE_LLM_PROVIDER` | `Literal['anthropic', 'none']` | `anthropic` | `anthropic` uses Claude for learning; `none` disables learning-side LLM calls (recall/record still work). |
+| `MYELINATE_LLM_PROVIDER` | `Literal['anthropic', 'openai_compatible', 'none']` | `anthropic` | `anthropic` uses Claude directly. `openai_compatible` uses any OpenAI-style chat completions endpoint (OpenRouter, Azure OpenAI, vLLM, LiteLLM, Ollama) at MYELINATE_LLM_BASE_URL. `none` disables learning-side LLM calls (recall and record still work). |
 | `MYELINATE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY` | `SecretStr or None` | — | Anthropic API key. Also read from plain ANTHROPIC_API_KEY (env or .env); unset means the SDK's default lookup. |
-| `MYELINATE_LLM_MODEL` | `str` | `claude-opus-5-5` | Model used for learning (not your agent's model). |
+| `MYELINATE_LLM_MODEL` | `str` | `claude-opus-5-5` | Model used for learning (not your agent's model). For OpenRouter use its id, e.g. `anthropic/claude-opus-5.5`. |
+| `MYELINATE_LLM_BASE_URL` | `str or None` | — | Base URL of the OpenAI-compatible endpoint, e.g. `https://openrouter.ai/api/v1`. |
+| `MYELINATE_LLM_API_KEY` | `SecretStr or None` | — | API key for the OpenAI-compatible endpoint. |
+| `MYELINATE_LLM_EXTRA_BODY` | `dict[str, Any]` | `{}` | Extra JSON merged into every OpenAI-compatible request, e.g. OpenRouter routing and privacy: `{"provider": {"data_collection": "deny", "zdr": true}}`. |
+| `MYELINATE_LLM_JSON_MODE` | `Literal['json_schema', 'json_object']` | `json_schema` | How to request JSON from OpenAI-compatible models: `json_schema` (strict, preferred) or `json_object` (for models without structured outputs; the schema is then included in the prompt). |
 | `MYELINATE_LLM_EFFORT` | `Literal['low', 'medium', 'high', 'xhigh', 'max']` | `medium` | Reasoning effort for learning calls. Lower is cheaper; raise for harder domains. |
 | `MYELINATE_LLM_MAX_TOKENS` | `int` | `16000` | Output token cap per learning call. |
 | `MYELINATE_DAILY_TOKEN_BUDGET` | `int` | `5000000` | Learning-side tokens per tenant per UTC day; jobs are deferred (not failed) when exceeded. 0 = unlimited. |
@@ -71,6 +75,7 @@ Every setting is an environment variable (or a line in `.env`). Names are `MYELI
 
 | Variable | Type | Default | Description |
 |---|---|---|---|
+| `MYELINATE_GOVERNANCE_MODE` | `Literal['auto', 'propose_only']` | `auto` | `auto` applies changes per the auto-approve settings below. `propose_only` never applies anything by itself: every skill change and memory waits as a proposal (no canaries), for a person to approve here or to promote in your own system (see the webhook settings and GET /v1/changesets/{id}/proposal). |
 | `MYELINATE_AUTO_APPROVE_MEMORIES` | `bool` | `True` | Apply new memories without review (still safety-scanned; flagged ones wait for approval). |
 | `MYELINATE_AUTO_APPROVE_LOW_RISK` | `bool` | `True` | Auto-apply purely additive skill changes (new rules / new skills). |
 | `MYELINATE_AUTO_APPROVE_MEDIUM_RISK` | `bool` | `False` | Auto-apply edits to existing rules and duplicate merges. Keep false for agents that act on production. |
@@ -108,6 +113,20 @@ Every setting is an environment variable (or a line in `.env`). Names are `MYELI
 | `MYELINATE_ARCHIVE_AFTER_DAYS` | `int` | `30` | Days unused before a skill is archived (not recalled; never deleted). Pinned skills are exempt. |
 | `MYELINATE_PROFILE_MAX_CHARS` | `int` | `1400` | Maximum length of a per-user profile card. |
 | `MYELINATE_SHARE_LEARNED_FACTS` | `bool` | `False` | Share facts learned from one user's runs with all users of the agent (off: they stay user-scoped). |
+
+## Webhooks
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `MYELINATE_WEBHOOK_URL` | `str or None` | — | URL that receives signed JSON events (proposals for your own review or content system). Unset disables. |
+| `MYELINATE_WEBHOOK_SECRET` | `SecretStr or None` | — | Shared secret for the `X-Myelinate-Signature: sha256=<hmac>` header on every delivery. |
+| `MYELINATE_WEBHOOK_EVENTS` | `list[str]` | `["changeset.proposed", "changeset.reviewed", "memory.pending"]` | Events to send: changeset.proposed, changeset.reviewed, memory.pending. |
+
+## Data capture
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `MYELINATE_CAPTURE_MODE` | `Literal['full', 'outcomes']` | `full` | `full` stores redacted messages and tool calls. `outcomes` stores only the task (truncated), outcome, verification details and tool names with their errors, so conversation text never reaches the database. |
 
 ## Ops
 

@@ -36,7 +36,7 @@ from ..db import (
 )
 from ..embeddings import Embedder, HttpEmbedder
 from ..engine import LearningEngine
-from ..llm import LLM, AnthropicLLM, DisabledLLM, LLMError
+from ..llm import LLM, AnthropicLLM, DisabledLLM, LLMError, OpenAICompatibleLLM
 from ..memory import valid_at
 from ..models import (
     AGENT_ID,
@@ -110,6 +110,11 @@ class KeyIn(BaseModel):
 
 
 def build_llm(s: Settings) -> LLM:
+    if s.llm_provider == "openai_compatible":
+        if not s.llm_base_url:
+            raise RuntimeError("MYELINATE_LLM_PROVIDER=openai_compatible needs MYELINATE_LLM_BASE_URL")
+        return OpenAICompatibleLLM(s.llm_base_url, s.llm_api_key.get_secret_value() if s.llm_api_key else None,
+                                   s.llm_model, s.llm_max_tokens, s.llm_extra_body, s.llm_json_mode)
     if s.llm_provider == "anthropic":
         key = s.anthropic_api_key.get_secret_value() if s.anthropic_api_key else None
         return AnthropicLLM(s.llm_model, s.llm_effort, s.llm_max_tokens,
@@ -464,6 +469,11 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None, embedde
                 q = q.where(ChangesetRow.agent_id == agent_id)
             rows = (await ses.scalars(q.order_by(ChangesetRow.created_at.desc()).limit(limit))).all()
         return [Changeset.model_validate(r, from_attributes=True) for r in rows]
+
+    @app.get("/v1/changesets/{cs_id}/proposal", tags=["governance"])
+    async def proposal(cs_id: str, p: Review) -> dict[str, Any]:
+        """A changeset as a reviewable suggestion: current and proposed SKILL.md, a unified diff, and the evidence."""
+        return await engine.gov.proposal(p.tenant_id, cs_id)
 
     @app.post("/v1/changesets/{cs_id}/review", tags=["governance"])
     async def review(cs_id: str, body: ReviewIn, p: Review) -> dict[str, str]:

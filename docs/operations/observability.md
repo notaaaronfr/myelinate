@@ -105,7 +105,7 @@ Things to know:
 
 The gateway can export its own server spans over OTLP/HTTP (protobuf).
 
-1. Install the extra: `uv sync --extra otel` (or `pip install 'myelinate[otel]'`). The Docker image already includes it.
+1. Install the extra: `uv sync --extra otel` (or `pip install 'myelinate[otel]'`, which includes the server extra). The Docker image already includes it.
 2. Set the standard exporter variables:
 
     ```bash

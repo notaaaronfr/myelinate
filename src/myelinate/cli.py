@@ -6,6 +6,14 @@ import argparse
 import asyncio
 
 
+def _require_server() -> None:
+    try:
+        import fastapi  # noqa: F401
+        import sqlalchemy  # noqa: F401
+    except ImportError:
+        raise SystemExit('The gateway needs the server extra: pip install "myelinate[server]"') from None
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="myelinate")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -19,6 +27,8 @@ def main() -> None:
     hc.add_argument("--port", type=int, default=8080)
     hc.add_argument("--max-age", type=float, default=60.0, help="max heartbeat age in seconds for workers")
     args = ap.parse_args()
+    if args.cmd != "healthcheck":
+        _require_server()
 
     if args.cmd == "serve":
         import uvicorn

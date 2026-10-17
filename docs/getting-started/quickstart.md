@@ -10,21 +10,21 @@ This takes about five minutes. You run the gateway locally, give it a skill, and
     ```bash
     git clone https://github.com/notaaaronfr/myelinate.git
     cd myelinate
-    uv sync
+    uv sync --extra server
     MYELINATE_ENV=dev uv run myelinate serve --port 8080
     ```
 
 === "Python (pip)"
 
     ```bash
-    pip install myelinate
+    pip install "myelinate[server]"
     MYELINATE_ENV=dev myelinate serve --port 8080
     ```
 
 === "Docker"
 
     ```bash
-    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.3.0
+    docker run --rm -p 8080:8080 -e MYELINATE_ENV=dev ghcr.io/notaaaronfr/myelinate:0.4.0
     ```
 
 `MYELINATE_ENV=dev` turns authentication off and puts everything in a tenant called `dev`. Use it only on your own

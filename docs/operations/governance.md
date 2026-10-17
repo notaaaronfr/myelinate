@@ -1,5 +1,9 @@
 # Governance
 
+!!! tip "Your own approval process"
+    If changes to agent instructions already go through a content store or review process, run Myelinate in
+    propose-only mode and export its suggestions there. See [Human-approved learning](../integrations/propose-only.md).
+
 Every change to a learned skill goes through a **changeset**: a bounded batch of typed operations that is scanned,
 risk-rated, approved by policy or a human, optionally canaried on live traffic, applied atomically as a new immutable
 version, and reversible. This page explains the lifecycle and the settings that control it, and shows how to

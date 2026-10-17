@@ -1259,7 +1259,7 @@
  "info": {
   "description": "Plug-in self-improvement for any agent framework: skills, memory, reflection, evolution, canary rollout and governance.",
   "title": "Myelinate",
-  "version": "0.3.0"
+  "version": "0.4.0"
  },
  "openapi": "3.1.0",
  "paths": {
@@ -1832,6 +1832,51 @@
      }
     },
     "summary": "List Changesets",
+    "tags": [
+     "governance"
+    ]
+   }
+  },
+  "/v1/changesets/{cs_id}/proposal": {
+   "get": {
+    "description": "A changeset as a reviewable suggestion: current and proposed SKILL.md, a unified diff, and the evidence.",
+    "operationId": "proposal_v1_changesets__cs_id__proposal_get",
+    "parameters": [
+     {
+      "in": "path",
+      "name": "cs_id",
+      "required": true,
+      "schema": {
+       "title": "Cs Id",
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "title": "Response Proposal V1 Changesets  Cs Id  Proposal Get",
+         "type": "object"
+        }
+       }
+      },
+      "description": "Successful Response"
+     },
+     "422": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      },
+      "description": "Validation Error"
+     }
+    },
+    "summary": "Proposal",
     "tags": [
      "governance"
     ]

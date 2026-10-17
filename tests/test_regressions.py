@@ -6,7 +6,7 @@ import asyncio
 import json
 
 from fastapi.testclient import TestClient
-from test_gateway import ADMIN, drain, episode, learn_deploy_skill, make, op, recall, skill
+from test_gateway import ADMIN, DEPLOY_OPS, drain, episode, learn_deploy_skill, make, op, recall, skill
 
 from myelinate.models import EpisodeIn, Outcome, RecallRequest, Scope
 
@@ -402,3 +402,62 @@ def test_otlp_child_spans_before_root_and_late_output_are_kept(env):
     ep = c.portal.call(load)
     assert ep.tool_calls and ep.tool_calls[0]["error"] == "ImagePullBackOff"  # early child span kept
     assert any(m["content"] == "rolled back" for m in ep.messages)  # late output appended
+
+
+def test_propose_only_trial_workflow(db_url):
+    """The 'watch-only trial': nothing applied automatically, proposals exported and pushed to a signed webhook,
+    no conversation text stored, and a human approval is what makes a change live."""
+    import hashlib
+    import hmac
+
+    import httpx as hx
+
+    delivered = []
+
+    def hook(req: hx.Request) -> hx.Response:
+        delivered.append(req)
+        return hx.Response(204)
+
+    app, brain = make(db_url, governance_mode="propose_only", capture_mode="outcomes",
+                      webhook_url="https://content-store.example/hooks/myelinate", webhook_secret="s3cret")
+    app.state.engine.webhook_transport = hx.MockTransport(hook)
+    with TestClient(app) as c:
+        h = {"authorization": f"Bearer {ADMIN}", "x-tenant-id": "acme"}
+        brain.curate_ops = DEPLOY_OPS
+        brain.memories = [{"kind": "fact", "content": "The billing service runs in the payments namespace"}]
+        ep = c.post("/v1/episodes", json=episode(), headers=h).json()
+        drain(c, app)
+
+        # nothing applied, nothing injected
+        assert c.get("/v1/skills", params={"agent_id": "ops"}, headers=h).json() == []
+        assert recall(c, h)["instructions"] == ""
+        assert c.get("/v1/memories", params={"agent_id": "ops", "status": "pending"}, headers=h).json()
+
+        # no conversation text stored
+        async def load():
+            from myelinate.db import EpisodeRow
+            async with app.state.db.session() as ses:
+                return await ses.get(EpisodeRow, ep["episode_id"])
+        row = c.portal.call(load)
+        assert row.messages == [] and row.tool_calls[0] == {"name": "kubectl", "arguments": None, "result": None,
+                                                            "error": "ImagePullBackOff"}
+
+        # proposal pushed to the webhook, signed, with a reviewable diff
+        events = {r.headers["x-myelinate-event"]: r for r in delivered}
+        assert {"changeset.proposed", "memory.pending"} <= set(events)
+        req = events["changeset.proposed"]
+        assert req.headers["x-myelinate-signature"] == "sha256=" + hmac.new(b"s3cret", req.content,
+                                                                             hashlib.sha256).hexdigest()
+        data = json.loads(req.content)["data"]
+        sk = data["skills"][0]
+        assert sk["skill"] == "deploy-k8s-service" and sk["current_skill_md"] == ""
+        assert "+- After applying, wait for kubectl rollout status" in sk["diff"]
+        assert data["evidence"][0]["verification"] is None or "verification" in data["evidence"][0]
+
+        # a person promotes it: only then does it go live (no canary in propose-only mode)
+        cs_id = data["changeset_id"]
+        assert c.get(f"/v1/changesets/{cs_id}/proposal", headers=h).json()["skills"][0]["skill"] == "deploy-k8s-service"
+        assert c.post(f"/v1/changesets/{cs_id}/review", json={"approve": True}, headers=h).json() == {"status": "applied"}
+        assert "rollout status" in recall(c, h)["instructions"]
+        drain(c, app)
+        assert any(r.headers["x-myelinate-event"] == "changeset.reviewed" for r in delivered)

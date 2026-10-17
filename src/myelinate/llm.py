@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 import anthropic
+import httpx
 from anthropic.types.beta import BetaOutputConfigParam
 
 UsageSink = Callable[[int, int], None]
@@ -65,6 +66,59 @@ class AnthropicLLM:
         if text is None:
             raise LLMError("no text block in response")
         return json.loads(text)
+
+
+class OpenAICompatibleLLM:
+    """Any OpenAI-style /chat/completions endpoint: OpenRouter, Azure OpenAI, vLLM, LiteLLM, Ollama.
+
+    `extra_body` is merged into every request (for example OpenRouter's
+    `{"provider": {"data_collection": "deny"}}`), so routing and privacy policy stay in configuration."""
+
+    def __init__(self, base_url: str, api_key: str | None, model: str, max_tokens: int,
+                 extra_body: dict[str, Any] | None = None, json_mode: str = "json_schema",
+                 transport: httpx.AsyncBaseTransport | None = None, timeout: float = 600.0) -> None:
+        headers = {"content-type": "application/json"}
+        if api_key:
+            headers["authorization"] = f"Bearer {api_key}"
+        self.model, self.max_tokens, self.extra, self.json_mode = model, max_tokens, extra_body or {}, json_mode
+        self.http = httpx.AsyncClient(base_url=base_url.rstrip("/") + "/", headers=headers, timeout=timeout,
+                                      transport=transport)
+
+    async def complete_json(self, system: str, prompt: str, schema: dict[str, Any],
+                            usage: UsageSink | None = None) -> dict[str, Any]:
+        if self.json_mode == "json_schema":
+            fmt: dict[str, Any] = {"type": "json_schema", "json_schema": {"name": "result", "strict": True,
+                                                                           "schema": schema}}
+        else:
+            fmt = {"type": "json_object"}
+            prompt += "\n\nReply with one JSON object that matches this JSON schema:\n" + json.dumps(schema)
+        body = {"model": self.model, "max_tokens": self.max_tokens, "response_format": fmt,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                **self.extra}
+        try:
+            r = await self.http.post("chat/completions", json=body)
+        except httpx.HTTPError as e:
+            raise LLMError(f"connection error: {e}") from e
+        if r.status_code == 429:
+            raise LLMError("rate limited")
+        if r.status_code >= 400:
+            raise LLMError(f"api error {r.status_code}: {r.text[:300]}")
+        data = r.json()
+        if usage and data.get("usage"):
+            usage(int(data["usage"].get("prompt_tokens") or 0), int(data["usage"].get("completion_tokens") or 0))
+        choice = (data.get("choices") or [{}])[0]
+        if choice.get("finish_reason") == "length":
+            raise LLMError("output truncated at max_tokens")
+        content = (choice.get("message") or {}).get("content")
+        if not content:
+            raise LLMError(f"no content in response (finish_reason={choice.get('finish_reason')})")
+        text = content.strip()
+        if text.startswith("```"):  # some models fence JSON even in JSON mode
+            text = text.strip("`").removeprefix("json").strip()
+        try:
+            return json.loads(text)
+        except ValueError as e:
+            raise LLMError(f"model returned invalid JSON: {e}") from e
 
 
 class ScriptedLLM:

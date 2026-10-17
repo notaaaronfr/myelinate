@@ -6,6 +6,7 @@ Runnable examples for integrating an agent with Myelinate. All of them talk to a
 Start a local dev gateway first (no credentials, tenant `dev`, no LLM needed for these examples):
 
 ```bash
+uv sync --extra server
 MYELINATE_ENV=dev MYELINATE_LLM_PROVIDER=none uv run myelinate serve --port 8080
 ```
 
@@ -16,7 +17,7 @@ model, so nothing new is learned. Drop it and set `ANTHROPIC_API_KEY` to see lea
 |---|---|---|
 | [`quickstart.sh`](quickstart.sh) | The REST loop with curl: import a SKILL.md, recall, record with verification, feedback, insights. Needs `curl` and `jq`. | `./examples/quickstart.sh` |
 | [`generic_agent.py`](generic_agent.py) | The framework-agnostic `SelfLearning` adapter around a stand-in agent function. No LLM needed. | `uv run python examples/generic_agent.py` |
-| [`maf_agent.py`](maf_agent.py) | Microsoft Agent Framework with `SelfLearningProvider`, `verify_fn`, `outcome_fn` and feedback. Uses Claude via `agent-framework-anthropic` when `ANTHROPIC_API_KEY` is set, otherwise a scripted stand-in client. | `uv sync --extra maf && uv run python examples/maf_agent.py` |
+| [`maf_agent.py`](maf_agent.py) | Microsoft Agent Framework with `SelfLearningProvider`, `verify_fn`, `outcome_fn` and feedback. Uses Claude via `agent-framework-anthropic` when `ANTHROPIC_API_KEY` is set, otherwise a scripted stand-in client. | `uv sync --extra server --extra maf && uv run python examples/maf_agent.py` |
 | [`openclaw-config.json5`](openclaw-config.json5) | The plugin entry for OpenClaw. | `openclaw config patch --file examples/openclaw-config.json5` |
 
 Notes:

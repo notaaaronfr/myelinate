@@ -1232,14 +1232,40 @@ wheels = [
 
 [[package]]
 name = "myelinate"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+maf = [
+    { name = "agent-framework-core" },
+]
+otel = [
     { name = "aiosqlite" },
     { name = "anthropic" },
     { name = "asyncpg" },
     { name = "fastapi" },
-    { name = "httpx" },
+    { name = "mcp" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-instrumentation-fastapi" },
+    { name = "opentelemetry-proto" },
+    { name = "opentelemetry-sdk" },
+    { name = "prometheus-client" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+server = [
+    { name = "aiosqlite" },
+    { name = "anthropic" },
+    { name = "asyncpg" },
+    { name = "fastapi" },
     { name = "mcp" },
     { name = "opentelemetry-proto" },
     { name = "prometheus-client" },
@@ -1249,16 +1275,6 @@ dependencies = [
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-maf = [
-    { name = "agent-framework-core" },
-]
-otel = [
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-instrumentation-fastapi" },
-    { name = "opentelemetry-sdk" },
 ]
 
 [package.dev-dependencies]
@@ -1274,26 +1290,28 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-framework-core", marker = "extra == 'maf'", specifier = ">=1.22.0" },
-    { name = "aiosqlite", specifier = ">=0.22.1" },
-    { name = "anthropic", specifier = ">=1.15.0" },
-    { name = "asyncpg", specifier = ">=0.32.0" },
-    { name = "fastapi", specifier = ">=0.143.2" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "mcp", specifier = ">=2.3.0" },
+    { name = "agent-framework-core", marker = "extra == 'maf'", specifier = ">=1.15" },
+    { name = "aiosqlite", marker = "extra == 'server'", specifier = ">=0.22.1" },
+    { name = "anthropic", marker = "extra == 'server'", specifier = ">=1.15.0" },
+    { name = "asyncpg", marker = "extra == 'server'", specifier = ">=0.32.0" },
+    { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.143.2" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "mcp", marker = "extra == 'server'", specifier = ">=2.3.0" },
+    { name = "myelinate", extras = ["server"], marker = "extra == 'otel'" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.45.1" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.66b1" },
-    { name = "opentelemetry-proto", specifier = ">=1.45.1" },
+    { name = "opentelemetry-proto", marker = "extra == 'server'", specifier = ">=1.45.1" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.45.1" },
-    { name = "prometheus-client", specifier = ">=0.26.0" },
-    { name = "pydantic", specifier = ">=2.14.1" },
-    { name = "pydantic-settings", specifier = ">=2.16.0" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.15.1" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2" },
-    { name = "structlog", specifier = ">=26.1.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
+    { name = "prometheus-client", marker = "extra == 'server'", specifier = ">=0.26.0" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic", marker = "extra == 'server'", specifier = ">=2.14.1" },
+    { name = "pydantic-settings", marker = "extra == 'server'", specifier = ">=2.16.0" },
+    { name = "pyjwt", extras = ["crypto"], marker = "extra == 'server'", specifier = ">=2.15.1" },
+    { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'server'", specifier = ">=2" },
+    { name = "structlog", marker = "extra == 'server'", specifier = ">=26.1.0" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.54.0" },
 ]
-provides-extras = ["maf", "otel"]
+provides-extras = ["server", "maf", "otel"]
 
 [package.metadata.requires-dev]
 dev = [

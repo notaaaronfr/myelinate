@@ -74,3 +74,42 @@ def _check_strict(schema: dict, path: str = "$") -> None:
 @pytest.mark.parametrize("name", [n for n in dir(P) if n.endswith("_SCHEMA")])
 def test_all_schemas_are_strict(name):
     _check_strict(getattr(P, name))
+
+
+async def test_openai_compatible_request_shape_and_privacy_passthrough():
+    import httpx as hx
+
+    from myelinate.llm import OpenAICompatibleLLM
+
+    seen = {}
+
+    def handler(req: hx.Request) -> hx.Response:
+        seen["url"], seen["auth"], seen["body"] = str(req.url), req.headers.get("authorization"), json.loads(req.content)
+        return hx.Response(200, json={"choices": [{"finish_reason": "stop", "message": {
+            "content": '```json\n{"reason": "ok", "outcome": "failure", "confidence": 0.8}\n```'}}],
+            "usage": {"prompt_tokens": 900, "completion_tokens": 40}})
+
+    llm = OpenAICompatibleLLM("https://openrouter.ai/api/v1/", "or-key", "anthropic/claude-opus-5.5", 4000,
+                              extra_body={"provider": {"data_collection": "deny", "zdr": True}},
+                              transport=hx.MockTransport(handler))
+    usage = []
+    out = await llm.complete_json(P.OUTCOME_SYSTEM, "run", P.OUTCOME_SCHEMA, usage=lambda i, o: usage.append((i, o)))
+    assert out["outcome"] == "failure" and usage == [(900, 40)]
+    b = seen["body"]
+    assert seen["url"] == "https://openrouter.ai/api/v1/chat/completions" and seen["auth"] == "Bearer or-key"
+    assert b["provider"] == {"data_collection": "deny", "zdr": True} and b["model"] == "anthropic/claude-opus-5.5"
+    assert b["response_format"]["json_schema"]["schema"] == P.OUTCOME_SCHEMA and b["messages"][0]["role"] == "system"
+
+
+async def test_openai_compatible_errors():
+    import httpx as hx
+
+    from myelinate.llm import OpenAICompatibleLLM
+
+    for status, body, match in [(429, {}, "rate limited"), (500, {"error": "x"}, "api error 500"),
+                                (200, {"choices": [{"finish_reason": "length", "message": {"content": "{"}}]}, "truncated"),
+                                (200, {"choices": [{"finish_reason": "stop", "message": {"content": "not json"}}]}, "invalid JSON")]:
+        llm = OpenAICompatibleLLM("http://x/v1", None, "m", 100,
+                                  transport=hx.MockTransport(lambda req, s=status, b=body: hx.Response(s, json=b)))
+        with pytest.raises(LLMError, match=match):
+            await llm.complete_json("s", "p", {"type": "object"})

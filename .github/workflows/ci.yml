@@ -43,6 +43,14 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+  client-compat:
+    name: Client installs into pinned stacks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - run: ./scripts/check_client_compat.sh
+
   openclaw-plugin:
     name: OpenClaw plugin typecheck
     runs-on: ubuntu-latest

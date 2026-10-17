@@ -1,6 +1,6 @@
 [project]
 name = "myelinate"
-version = "0.3.0"
+version = "0.4.0"
 description = "Self-improving skills and memory for any AI agent framework, with governance built in"
 readme = "README.md"
 license = "MIT"
@@ -19,11 +19,18 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    # The client, models and framework adapters only. Installs into existing agent codebases without touching
+    # their web framework, MCP or agent-framework versions. The gateway's dependencies are in the `server` extra.
+    "httpx>=0.27",
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+server = [
     "aiosqlite>=0.22.1",
     "anthropic>=1.15.0",
     "asyncpg>=0.32.0",
     "fastapi>=0.143.2",
-    "httpx>=0.28.1",
     "mcp>=2.3.0",
     "opentelemetry-proto>=1.45.1",
     "prometheus-client>=0.26.0",
@@ -34,12 +41,11 @@ dependencies = [
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
 ]
-
-[project.optional-dependencies]
 maf = [
-    "agent-framework-core>=1.22.0",
+    "agent-framework-core>=1.15",
 ]
 otel = [
+    "myelinate[server]",
     "opentelemetry-exporter-otlp-proto-http>=1.45.1",
     "opentelemetry-instrumentation-fastapi>=0.66b1",
     "opentelemetry-sdk>=1.45.1",

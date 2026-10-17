@@ -59,6 +59,7 @@ nav:
       - OpenTelemetry (zero code): integrations/opentelemetry.md
       - LangGraph, CrewAI and others: integrations/other-frameworks.md
       - TypeScript: integrations/typescript.md
+      - Human-approved learning: integrations/propose-only.md
   - Deployment:
       - Docker: deployment/docker.md
       - Kubernetes: deployment/kubernetes.md

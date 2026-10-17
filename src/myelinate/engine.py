@@ -86,7 +86,29 @@ class LearningEngine:
                 return await self.maint.run(tenant, payload)
             case "profile":
                 return await self.mem.refresh_profile(tenant, payload["agent_id"], payload["user_id"])
+            case "webhook":
+                return await self._webhook(tenant, payload)
         raise ValueError(f"unknown job kind {kind}")
+
+    webhook_transport: Any = None  # tests inject an httpx transport
+
+    async def _webhook(self, tenant: str, payload: dict[str, Any]) -> None:
+        from .webhooks import deliver
+
+        event, ref = payload["event"], payload["ref"]
+        if event.startswith("changeset."):
+            data = await self.gov.proposal(tenant, ref)
+        else:
+            async with self.db.session() as ses:
+                m = await ses.get(MemoryRow, ref)
+                if m is None or m.tenant_id != tenant:
+                    return
+                data = {"memory_id": m.id, "agent_id": m.agent_id, "user_id": m.user_id, "kind": m.kind,
+                        "content": m.content, "status": m.status, "sources": m.sources,
+                        "approve_url": f"/v1/memories/{m.id}/approve"}
+        data["tenant_id"] = tenant
+        secret = self.s.webhook_secret.get_secret_value() if self.s.webhook_secret else None
+        await deliver(self.s.webhook_url or "", secret, event, f"{event}:{ref}", data, self.webhook_transport)
 
     # ================================================================ recall
 
@@ -218,6 +240,10 @@ class LearningEngine:
                  for t in ep.tool_calls]
         agent = ep.scope.agent_id
         task = ep.task or next((m["content"] for m in msgs if m["role"] == "user"), None)
+        if s.capture_mode == "outcomes":  # keep what learning needs; never store conversation text
+            msgs = []
+            tools = [{"name": t["name"], "arguments": None, "result": None, "error": t["error"]} for t in tools]
+            task = clip(task, 300) if task else None
         meta = dict(ep.metadata)
         if ep.verification:
             meta["verification"] = {"passed": ep.verification.passed, "source": ep.verification.source,
@@ -295,13 +321,16 @@ class LearningEngine:
             if row is None or row.tenant_id != tenant:
                 raise NotFound(episode_id)
             seen = {json.dumps(t, sort_keys=True) for t in row.tool_calls}
+            outcomes = self.s.capture_mode == "outcomes"
             for t in ep.tool_calls:
-                d = {"name": t.name, "arguments": red(str(t.arguments)) if t.arguments is not None else None,
-                     "result": red(t.result) if t.result else None, "error": red(t.error) if t.error else None}
+                d = {"name": t.name, "arguments": None if outcomes or t.arguments is None else red(str(t.arguments)),
+                     "result": None if outcomes or not t.result else red(t.result),
+                     "error": red(t.error) if t.error else None}
                 if json.dumps(d, sort_keys=True) not in seen:
                     row.tool_calls = [*row.tool_calls, d]
             have = {(m["role"], m["content"]) for m in row.messages}
-            new_msgs = [{"role": m.role, "content": red(m.content)} for m in ep.messages]
+            new_msgs = ([] if self.s.capture_mode == "outcomes"
+                        else [{"role": m.role, "content": red(m.content)} for m in ep.messages])
             row.messages = [*row.messages, *(m for m in new_msgs if (m["role"], m["content"]) not in have)]
             row.task = row.task or (red(ep.task) if ep.task else None)
             row.user_id = row.user_id or ep.scope.user_id

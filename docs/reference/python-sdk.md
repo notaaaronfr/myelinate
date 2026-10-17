@@ -3,9 +3,17 @@
 The `myelinate` package includes clients and framework adapters. Install it with the extras you need:
 
 ```bash
-pip install myelinate             # client + gateway
-pip install "myelinate[maf]"      # + Microsoft Agent Framework adapter
-pip install "myelinate[otel]"     # + OpenTelemetry tracing of the gateway itself
+pip install myelinate              # client, models and generic adapter (needs only httpx and pydantic)
+pip install "myelinate[maf]"       # + Microsoft Agent Framework adapter (MAF 1.15 or later)
+pip install "myelinate[server]"    # the gateway and EmbeddedClient (FastAPI, SQLAlchemy, MCP, Anthropic SDK...)
+pip install "myelinate[otel]"      # + OpenTelemetry tracing of the gateway itself
+```
+
+The client is deliberately light so it can go into an existing agent codebase without moving its pins on web
+frameworks, MCP or the agent framework. CI checks this on every change against a pinned stack (MAF 1.15, MCP 1.29,
+FastAPI 0.141, Pydantic 2.13). Run the gateway as its own service with the `server` extra.
+
+```bash
 ```
 
 ## Clients

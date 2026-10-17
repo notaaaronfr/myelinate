@@ -24,12 +24,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
+import logging
 
 from ..client import LearnerClient, make_tools
 from ..models import EpisodeIn, FeedbackIn, Message, Outcome, RecallRequest, Scope, ToolCall, Verification
 
-log = structlog.get_logger()
+log = logging.getLogger(__name__)
 
 
 @dataclass

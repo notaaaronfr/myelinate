@@ -195,3 +195,15 @@ for each agent, `GET /v1/profiles/{agent_id}/{user_id}`, and a database query on
 
 See also: [Security](security.md), [Backup and upgrades](backup-and-upgrades.md),
 [Configuration reference](../reference/configuration.md).
+
+## Minimising what's stored and where it goes
+
+- **`MYELINATE_CAPTURE_MODE=outcomes`** keeps conversation text out of the database entirely. Episodes keep the task
+  (truncated to 300 characters and redacted), the outcome, verification details and tool names with their errors.
+  Learning still works from that signal, though suggestions are less specific than with full transcripts.
+- **Choose where learning calls go.** With `MYELINATE_LLM_PROVIDER=openai_compatible` you can route learning through
+  your own gateway, Azure OpenAI, a self-hosted model, or OpenRouter with provider privacy settings in
+  `MYELINATE_LLM_EXTRA_BODY` (for example `{"provider": {"data_collection": "deny"}}`).
+- **Propose-only mode** (`MYELINATE_GOVERNANCE_MODE=propose_only`) keeps every learned change as a suggestion until a
+  person approves it. See [Human-approved learning](../integrations/propose-only.md).
+

@@ -105,6 +105,10 @@ class EmbeddedClient:
     """In-process engine. Call `await start()` once; runs its own background worker."""
 
     def __init__(self, tenant_id: str = "local", settings: Any = None, llm: Any = None) -> None:
+        try:
+            import sqlalchemy  # noqa: F401
+        except ImportError:
+            raise ImportError('EmbeddedClient runs the engine in-process: pip install "myelinate[server]"') from None
         from .config import get_settings
         from .db import Database
         from .engine import LearningEngine

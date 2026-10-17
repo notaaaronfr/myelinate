@@ -5,6 +5,32 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-17
+
+Driven by feedback from a team trialling Myelinate on a production agent with pinned dependencies, a human-promoted
+content store and strict data rules.
+
+### Added
+- **Propose-only governance** (`MYELINATE_GOVERNANCE_MODE=propose_only`). Nothing is applied automatically, there are
+  no canaries, and memories are held for approval. Every change waits as a suggestion.
+- **Proposal export:** `GET /v1/changesets/{id}/proposal` returns the current and proposed SKILL.md for each skill,
+  a unified diff, the ops, and the evidence.
+- **Signed webhooks** (`MYELINATE_WEBHOOK_URL`, `MYELINATE_WEBHOOK_SECRET`, `MYELINATE_WEBHOOK_EVENTS`) for
+  `changeset.proposed`, `changeset.reviewed` and `memory.pending`. They are durable and retried, with HMAC-SHA256
+  signatures.
+- **OpenAI-compatible learning provider** (`MYELINATE_LLM_PROVIDER=openai_compatible`) for OpenRouter, Azure OpenAI,
+  vLLM, LiteLLM and Ollama. `MYELINATE_LLM_EXTRA_BODY` passes through routing and privacy settings such as
+  `{"provider": {"data_collection": "deny"}}`.
+- **Outcomes-only capture** (`MYELINATE_CAPTURE_MODE=outcomes`): no conversation text is stored.
+- Guide: [Human-approved learning](https://notaaaronfr.github.io/myelinate/integrations/propose-only/), with a
+  watch-only trial setup.
+
+### Changed
+- **Lightweight client install.** `pip install myelinate` now needs only `httpx` and `pydantic`. The gateway's
+  dependencies moved to the `server` extra (`pip install "myelinate[server]"`); the Docker image includes them.
+- The Microsoft Agent Framework adapter supports MAF **1.15** and later (it was 1.22). CI checks that the client
+  installs into a pinned stack (MAF 1.15, MCP 1.29, FastAPI 0.141, Pydantic 2.13) without moving any pin.
+
 ## [0.3.0] - 2026-10-17
 
 ### Added

@@ -7,7 +7,7 @@ Your agent code does not change.
 ## Install
 
 ```bash
-pip install "myelinate[maf]"     # pulls agent-framework-core
+pip install "myelinate[maf]"     # client + adapter; works with agent-framework-core 1.15 and later
 ```
 
 The `maf` extra installs `agent-framework-core`. Install the MAF chat client package you use separately, for example

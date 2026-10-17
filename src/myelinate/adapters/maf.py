@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-import structlog
+import logging
 
 try:
     from agent_framework import AgentSession, ContextProvider, SessionContext
@@ -32,7 +32,7 @@ except ImportError as e:  # pragma: no cover
 from ..client import LearnerClient, make_tools
 from ..models import EpisodeIn, Message, Outcome, RecallRequest, Scope, ToolCall, Verification
 
-log = structlog.get_logger()
+log = logging.getLogger(__name__)
 OutcomeFn = Callable[[SessionContext], Outcome]
 VerifyFn = Callable[[SessionContext], Verification | None]
 

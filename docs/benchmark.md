@@ -33,6 +33,7 @@ The rules, which the agent must discover:
 ## Reproduce
 
 ```bash
+uv sync --extra server
 echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
 set -a; . ./.env; set +a
 uv run python benchmarks/house_rules/run.py --epochs 1     # writes results.json
