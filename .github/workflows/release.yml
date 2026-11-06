@@ -97,7 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { ref: "${{ env.TAG }}" }
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
